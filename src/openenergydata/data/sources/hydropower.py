@@ -2,7 +2,7 @@
 
 Handles loading and cleaning of hydropower data from:
 - African Hydropower Atlas v2.0
-- Global Hydropower Tracker (April 2025)
+- Global Energy Monitor (filtered from Global Integrated Power)
 """
 
 from __future__ import annotations
@@ -126,90 +126,6 @@ def load_african_hydro_atlas(
         print(f"{len(df)} rows after filtering")
 
     return df[output_columns].reset_index(drop=True)
-
-
-def load_global_hydro_tracker(
-    xlsx_path: Path,
-    countries: Optional[List[str]] = None,
-    sheet_name: str = "Data",
-    verbose: bool = False,
-) -> pd.DataFrame:
-    """Load hydropower data from Global Hydropower Tracker.
-
-    Args:
-        xlsx_path: Path to the Global Hydropower Tracker Excel file
-        countries: List of countries to filter by (None = all)
-        sheet_name: Sheet name containing main data
-        verbose: Whether to print progress messages
-
-    Returns:
-        DataFrame with standardized hydropower columns
-    """
-    path = Path(xlsx_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Global Hydropower Tracker file not found: {path}")
-
-    df = pd.read_excel(path, sheet_name=sheet_name, header=0)
-
-    if verbose:
-        print(f"Loaded {len(df)} rows from {path}")
-        print(f"Columns: {list(df.columns)}")
-
-    # The Global Hydropower Tracker has similar columns to Global Integrated Power
-    # Normalize as needed based on actual column names
-
-    # Common column mappings
-    column_mapping = {
-        "Plant / Project name": "name",
-        "Project name": "name",
-        "Country/area": "country",
-        "Country": "country",
-        "Capacity (MW)": "capacity_mw",
-        "Status": "status",
-        "Latitude": "latitude",
-        "Longitude": "longitude",
-        "Technology": "technology_detail",
-        "River": "river_name",
-        "Start year": "start_year",
-    }
-
-    df = df.rename(columns={k: v for k, v in column_mapping.items() if k in df.columns})
-
-    # Add technology column
-    df["technology"] = "Hydro"
-
-    # Normalize status
-    if "status" in df.columns:
-        df["status"] = df["status"].str.lower().map(
-            lambda x: STATUS_MAPPING.get(x, x.title() if pd.notna(x) else "Unknown")
-        )
-
-    # Filter by countries if provided
-    if countries and "country" in df.columns:
-        available = df["country"].dropna().unique().tolist()
-        resolved = []
-        for country in countries:
-            match = resolve_country_name(country, available, threshold=0.75)
-            if match:
-                resolved.append(match)
-
-        if resolved:
-            df = df[df["country"].isin(resolved)]
-        else:
-            df = pd.DataFrame(columns=df.columns)
-
-    # Convert numeric columns
-    for col in ["capacity_mw", "latitude", "longitude", "start_year"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Drop rows without coordinates
-    df = df.dropna(subset=["latitude", "longitude"])
-
-    if verbose:
-        print(f"{len(df)} rows after filtering")
-
-    return df.reset_index(drop=True)
 
 
 def load_hydro_climate_scenarios(

@@ -1,8 +1,10 @@
 """Data source paths configuration.
 
 Centralized configuration for all data source file paths.
+Supports country-based caching with metadata tracking.
 """
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -22,7 +24,6 @@ DATA_SOURCES = {
 
     # Hydropower
     "african_hydro_atlas": SOURCES_DIR / "African_Hydropower_Atlas_v2-0.xlsx",
-    "global_hydro_tracker": SOURCES_DIR / "Global-Hydropower-Tracker-April-2025.xlsx",
 
     # IRENA Resource Potential
     "irena_solar_msr": SOURCES_DIR / "SolarPV_BestMSRsToCover5%CountryArea.csv",
@@ -72,3 +73,83 @@ def data_source_exists(source_name: str) -> bool:
     """
     path = get_data_source_path(source_name)
     return path is not None and path.exists()
+
+
+# Valid data types for country-based caching
+VALID_DATA_TYPES = frozenset({
+    "power_plants",
+    "load_profiles",
+    "hydropower",
+    "resource_potential_solar",
+    "resource_potential_wind",
+    "re_profiles_solar",
+    "re_profiles_wind",
+})
+
+
+def normalize_country_name_for_path(country: str) -> str:
+    """Convert country name to safe filesystem path component.
+
+    Examples:
+        "South Africa" -> "south_africa"
+        "Cote d'Ivoire" -> "cote_divoire"
+        "Democratic Republic of the Congo" -> "democratic_republic_of_the_congo"
+
+    Args:
+        country: Country name in any format
+
+    Returns:
+        Lowercase, underscore-separated, filesystem-safe string
+    """
+    normalized = country.lower()
+    normalized = normalized.replace(" ", "_")
+    normalized = normalized.replace("'", "")
+    normalized = normalized.replace("-", "_")
+    # Remove any other special characters
+    normalized = re.sub(r"[^a-z0-9_]", "", normalized)
+    return normalized
+
+
+def get_country_cache_dir(data_type: str) -> Path:
+    """Get the directory for country-based cache files.
+
+    Args:
+        data_type: One of 'power_plants', 'load_profiles', 'hydropower',
+                   'resource_potential_solar', 'resource_potential_wind',
+                   're_profiles_solar', 're_profiles_wind'
+
+    Returns:
+        Path to data/local/{data_type}/
+
+    Raises:
+        ValueError: If data_type is not valid
+    """
+    if data_type not in VALID_DATA_TYPES:
+        raise ValueError(f"Invalid data type: {data_type}. Must be one of {VALID_DATA_TYPES}")
+    return LOCAL_DIR / data_type
+
+
+def get_country_cache_path(data_type: str, country: str) -> Path:
+    """Get the cache file path for a specific country and data type.
+
+    Args:
+        data_type: Data type identifier
+        country: Country name (will be normalized)
+
+    Returns:
+        Path to data/local/{data_type}/{country_normalized}.parquet
+    """
+    normalized = normalize_country_name_for_path(country)
+    return get_country_cache_dir(data_type) / f"{normalized}.parquet"
+
+
+def get_cache_metadata_path(data_type: str) -> Path:
+    """Get the metadata file path for a data type.
+
+    Args:
+        data_type: Data type identifier
+
+    Returns:
+        Path to data/local/{data_type}/_metadata.json
+    """
+    return get_country_cache_dir(data_type) / "_metadata.json"

@@ -50,7 +50,7 @@ class HydroSummaryResponse(BaseModel):
 async def get_hydropower(
     region: str = Query(..., description="Region ID (e.g., 'southern_africa')"),
     countries: Optional[List[str]] = Query(None, description="Filter by specific countries"),
-    source: str = Query("both", description="Data source: 'african_atlas', 'global_tracker', or 'both'"),
+    source: str = Query("both", description="Data source: 'african_atlas', 'gem' (filtered from Global Integrated Power), or 'both'"),
     status: Optional[str] = Query(None, description="Filter by status (e.g., 'Operating')"),
     min_capacity: Optional[float] = Query(None, description="Minimum capacity in MW"),
 ):
@@ -99,7 +99,7 @@ async def get_hydropower(
 async def get_hydropower_summary(
     region: str = Query(..., description="Region ID"),
     countries: Optional[List[str]] = Query(None, description="Filter by specific countries"),
-    source: str = Query("both", description="Data source"),
+    source: str = Query("both", description="Data source: 'african_atlas', 'gem', or 'both'"),
 ):
     """Get summary statistics for hydropower by country."""
     df = load_hydropower(region, countries, source=source)
@@ -151,7 +151,7 @@ async def get_hydro_climate_scenarios(
 async def get_hydropower_geojson(
     region: str = Query(..., description="Region ID"),
     countries: Optional[List[str]] = Query(None, description="Filter by specific countries"),
-    source: str = Query("both", description="Data source"),
+    source: str = Query("both", description="Data source: 'african_atlas', 'gem', or 'both'"),
 ):
     """Get hydropower plants as GeoJSON FeatureCollection."""
     df = load_hydropower(region, countries, source=source)

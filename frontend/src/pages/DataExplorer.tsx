@@ -3,38 +3,50 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import { Loader2, Download, AlertCircle, CheckCircle2, Info } from 'lucide-react';
-import { regionsApi, powerPlantsApi, loadProfilesApi, hydropowerApi, resourcePotentialApi, socioeconomicApi, renewablesApi, dataQualityApi, type RenewablesNinjaResponse } from '../api/client';
+import { regionsApi, powerPlantsApi, loadProfilesApi, hydropowerApi, resourcePotentialApi, socioeconomicApi, renewablesApi, dataQualityApi, type RenewablesNinjaResponse, API_BASE_URL } from '../api/client';
 import SourceInfo, { DATA_SOURCES } from '../components/SourceInfo';
-import MapLayerControl, { DEFAULT_LAYERS, type MapLayer } from '../components/MapLayerControl';
+import MapLayerControl, { DEFAULT_TECHNOLOGY_LAYERS, DEFAULT_STATUS_LAYERS, type MapLayer } from '../components/MapLayerControl';
 import TimeSelector from '../components/TimeSelector';
 import { useLoading } from '../contexts/LoadingContext';
 import { useApiKeys } from '../contexts/ApiKeyContext';
+import { formatNumber } from '../utils/format';
 import 'leaflet/dist/leaflet.css';
 
-// Technology colors for visualization
-const TECH_COLORS: Record<string, string> = {
-  'Coal': '#4a4a4a',
-  'Gas': '#f97316',
-  'Oil': '#854d0e',
-  'Nuclear': '#7c3aed',
-  'Hydro': '#0ea5e9',
-  'Solar': '#eab308',
-  'Wind': '#22c55e',
-  'Biomass': '#84cc16',
-  'Geothermal': '#dc2626',
-  'Battery': '#06b6d4',
-  'Other': '#9ca3af',
-};
+// Technology colors for visualization (ordered for matching priority)
+const TECH_COLOR_MAP: Array<[string, string]> = [
+  ['coal', '#4a4a4a'],      // Dark gray
+  ['gas', '#f97316'],       // Orange
+  ['oil', '#854d0e'],       // Brown
+  ['nuclear', '#7c3aed'],   // Purple
+  ['hydro', '#0ea5e9'],     // Blue
+  ['solar', '#eab308'],     // Yellow
+  ['wind', '#22c55e'],      // Green
+  ['biomass', '#84cc16'],   // Light green
+  ['geothermal', '#dc2626'], // Red
+  ['battery', '#06b6d4'],   // Cyan
+];
 
 const getTechColor = (tech: string): string => {
-  const normalized = tech?.toLowerCase() || '';
-  for (const [key, color] of Object.entries(TECH_COLORS)) {
-    if (normalized.includes(key.toLowerCase())) return color;
+  const normalized = (tech || '').toLowerCase();
+  for (const [key, color] of TECH_COLOR_MAP) {
+    if (normalized.includes(key)) return color;
   }
-  return TECH_COLORS['Other'];
+  return '#9ca3af'; // Gray for "Other"
 };
 
 type TabType = 'map' | 'plants' | 'hydropower' | 'renewables' | 'socioeconomic' | 'load';
+
+// Helper to build export URLs with current region and country selection
+const buildExportUrl = (endpoint: string, region: string, countries?: string[], extraParams?: Record<string, string>) => {
+  const params = new URLSearchParams({ region });
+  if (countries?.length) {
+    params.set('countries', countries.join(','));
+  }
+  if (extraParams) {
+    Object.entries(extraParams).forEach(([k, v]) => params.set(k, v));
+  }
+  return `${API_BASE_URL}${endpoint}?${params}`;
+};
 
 // Available power plant data sources
 const POWER_PLANT_SOURCES = [
@@ -46,10 +58,18 @@ export default function DataExplorer() {
   const [selectedRegion, setSelectedRegion] = useState('sapp');
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('map');
-  const [enabledLayers, setEnabledLayers] = useState<string[]>(['power_plants']);
+  // Map filter layers (technology and status)
+  const [enabledTechLayers, setEnabledTechLayers] = useState<string[]>(['coal', 'gas', 'hydro', 'solar', 'wind', 'oil', 'nuclear', 'biomass', 'geothermal', 'battery', 'other']);
+  const [enabledStatusLayers, setEnabledStatusLayers] = useState<string[]>(['operating']);
   const [loadYear, setLoadYear] = useState(2020);
   const [loadMonths, setLoadMonths] = useState<number[]>([]);  // Empty = all months
   const [powerPlantSources, setPowerPlantSources] = useState<string[]>(['gem']);
+
+  // Power Plants table sort/filter state
+  const [plantSortColumn, setPlantSortColumn] = useState<'name' | 'technology' | 'capacity_mw' | 'status' | 'country'>('capacity_mw');
+  const [plantSortDirection, setPlantSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [plantTechFilter, setPlantTechFilter] = useState<string>('all');
+  const [plantStatusFilter, setPlantStatusFilter] = useState<string>('all');
 
   // Renewables.ninja state
   const [ninjaYear, setNinjaYear] = useState(2019);
@@ -72,48 +92,218 @@ export default function DataExplorer() {
   const regionCountries = currentRegion?.countries || [];
   const countriesParam = selectedCountries.length > 0 ? selectedCountries : undefined;
 
+  // Set first country as default when region loads (instead of "All Countries")
+  useEffect(() => {
+    if (regionCountries.length > 0 && selectedCountries.length === 0) {
+      setSelectedCountries([regionCountries[0]]);
+    }
+  }, [regionCountries, selectedCountries.length]);
+
+  // DEBUG: Log country selection changes
+  useEffect(() => {
+    console.log('[DEBUG] Country Selection:', {
+      selectedCountries,
+      countriesParam,
+      regionCountriesCount: regionCountries.length,
+    });
+  }, [selectedCountries, countriesParam, regionCountries.length]);
+
   // Fetch power plants for each selected source
+  // Note: Use selectedCountries directly in queryFn to avoid stale closure issues
   const { data: plantsDataGem, isLoading: plantsLoadingGem, isFetching: plantsFetchingGem } = useQuery({
     queryKey: ['power-plants', selectedRegion, selectedCountries, 'gem'],
-    queryFn: () => powerPlantsApi.list({ region: selectedRegion, countries: countriesParam, source: 'gem' }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return powerPlantsApi.list({ region: selectedRegion, countries, source: 'gem' });
+    },
     enabled: !!selectedRegion && powerPlantSources.includes('gem'),
   });
 
   const { data: plantsDataGppd, isLoading: plantsLoadingGppd, isFetching: plantsFetchingGppd } = useQuery({
     queryKey: ['power-plants', selectedRegion, selectedCountries, 'gppd'],
-    queryFn: () => powerPlantsApi.list({ region: selectedRegion, countries: countriesParam, source: 'gppd' }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return powerPlantsApi.list({ region: selectedRegion, countries, source: 'gppd' });
+    },
     enabled: !!selectedRegion && powerPlantSources.includes('gppd'),
   });
 
   // Fetch power plants summary for each source
   const { data: summaryGem } = useQuery({
     queryKey: ['power-plants-summary', selectedRegion, selectedCountries, 'gem'],
-    queryFn: () => powerPlantsApi.summary({ region: selectedRegion, countries: countriesParam, source: 'gem' }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return powerPlantsApi.summary({ region: selectedRegion, countries, source: 'gem' });
+    },
     enabled: !!selectedRegion && powerPlantSources.includes('gem'),
   });
 
   const { data: summaryGppd } = useQuery({
     queryKey: ['power-plants-summary', selectedRegion, selectedCountries, 'gppd'],
-    queryFn: () => powerPlantsApi.summary({ region: selectedRegion, countries: countriesParam, source: 'gppd' }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return powerPlantsApi.summary({ region: selectedRegion, countries, source: 'gppd' });
+    },
     enabled: !!selectedRegion && powerPlantSources.includes('gppd'),
   });
 
-  // Combined data for backward compatibility (use first available source for map/summary)
-  const plantsData = plantsDataGem || plantsDataGppd;
-  const plantsLoading = plantsLoadingGem || plantsLoadingGppd;
-  const summary = summaryGem || summaryGppd;
+  // Select data based on user's source selection (fixes bug where GEM always showed)
+  const plantsData = useMemo(() => {
+    const primarySource = powerPlantSources[0];
+    if (primarySource === 'gppd') return plantsDataGppd;
+    return plantsDataGem;
+  }, [powerPlantSources, plantsDataGem, plantsDataGppd]);
+
+  const plantsLoading = useMemo(() => {
+    const primarySource = powerPlantSources[0];
+    if (primarySource === 'gppd') return plantsLoadingGppd;
+    return plantsLoadingGem;
+  }, [powerPlantSources, plantsLoadingGem, plantsLoadingGppd]);
+
+  const summary = useMemo(() => {
+    const primarySource = powerPlantSources[0];
+    if (primarySource === 'gppd') return summaryGppd;
+    return summaryGem;
+  }, [powerPlantSources, summaryGem, summaryGppd]);
+
+  // Filtered and sorted plants for table view
+  const filteredPlants = useMemo(() => {
+    let plants = plantsData?.plants || [];
+
+    // Apply filters
+    if (plantTechFilter !== 'all') {
+      plants = plants.filter(p =>
+        p.technology?.toLowerCase().includes(plantTechFilter.toLowerCase())
+      );
+    }
+
+    if (plantStatusFilter !== 'all') {
+      plants = plants.filter(p =>
+        p.status?.toLowerCase() === plantStatusFilter.toLowerCase()
+      );
+    }
+
+    // Apply sorting
+    plants = [...plants].sort((a, b) => {
+      let aVal = a[plantSortColumn];
+      let bVal = b[plantSortColumn];
+
+      // Handle nulls
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return plantSortDirection === 'asc' ? 1 : -1;
+      if (bVal == null) return plantSortDirection === 'asc' ? -1 : 1;
+
+      // Compare based on type
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return plantSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+
+      // String comparison
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      if (plantSortDirection === 'asc') {
+        return aStr.localeCompare(bStr);
+      }
+      return bStr.localeCompare(aStr);
+    });
+
+    return plants;
+  }, [plantsData?.plants, plantTechFilter, plantStatusFilter, plantSortColumn, plantSortDirection]);
+
+  // Handle column header click for sorting
+  const handlePlantSort = (column: 'name' | 'technology' | 'capacity_mw' | 'status' | 'country') => {
+    if (plantSortColumn === column) {
+      // Toggle direction if same column
+      setPlantSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column - default to desc for capacity, asc for others
+      setPlantSortColumn(column);
+      setPlantSortDirection(column === 'capacity_mw' ? 'desc' : 'asc');
+    }
+  };
+
+  // Get unique values for filter dropdowns
+  const uniqueTechnologies = useMemo(() =>
+    Array.from(new Set(plantsData?.plants?.map(p => p.technology).filter(Boolean) || [])).sort()
+  , [plantsData?.plants]);
+
+  const uniqueStatuses = useMemo(() =>
+    Array.from(new Set(plantsData?.plants?.map(p => p.status).filter(Boolean) || [])).sort()
+  , [plantsData?.plants]);
+
+  // Helper to check if a plant is operating
+  const isOperating = (status: string | undefined) => {
+    const s = (status || '').toLowerCase();
+    return s.includes('operat');
+  };
+
+  // Capacity by fuel type for each data source (for summary table) - ONLY OPERATING PLANTS
+  const capacityByTechGem = useMemo(() => {
+    if (!plantsDataGem?.plants) return [];
+    const byTech: Record<string, number> = {};
+    plantsDataGem.plants
+      .filter(plant => isOperating(plant.status))
+      .forEach(plant => {
+        const tech = plant.technology || 'Other';
+        byTech[tech] = (byTech[tech] || 0) + (plant.capacity_mw || 0);
+      });
+    return Object.entries(byTech)
+      .map(([tech, capacity]) => ({ technology: tech, capacity, color: getTechColor(tech) }))
+      .sort((a, b) => b.capacity - a.capacity);
+  }, [plantsDataGem?.plants]);
+
+  const capacityByTechGppd = useMemo(() => {
+    if (!plantsDataGppd?.plants) return [];
+    const byTech: Record<string, number> = {};
+    plantsDataGppd.plants
+      .filter(plant => isOperating(plant.status))
+      .forEach(plant => {
+        const tech = plant.technology || 'Other';
+        byTech[tech] = (byTech[tech] || 0) + (plant.capacity_mw || 0);
+      });
+    return Object.entries(byTech)
+      .map(([tech, capacity]) => ({ technology: tech, capacity, color: getTechColor(tech) }))
+      .sort((a, b) => b.capacity - a.capacity);
+  }, [plantsDataGppd?.plants]);
+
+  // Total operating capacity for each source
+  const totalOperatingGem = useMemo(() =>
+    capacityByTechGem.reduce((sum, t) => sum + t.capacity, 0)
+  , [capacityByTechGem]);
+
+  const totalOperatingGppd = useMemo(() =>
+    capacityByTechGppd.reduce((sum, t) => sum + t.capacity, 0)
+  , [capacityByTechGppd]);
+
+  // DEBUG: Log plants data to verify country filtering
+  useEffect(() => {
+    if (plantsData?.plants) {
+      const countriesInData = [...new Set(plantsData.plants.map(p => p.country))];
+      console.log('[DEBUG] Plants Data:', {
+        total: plantsData.count,
+        countriesInData,
+        expectedCountries: countriesParam || 'all region countries',
+      });
+    }
+  }, [plantsData, countriesParam]);
 
   // Fetch load profiles (daily average - all months, filtered client-side)
   const { data: loadData } = useQuery({
     queryKey: ['load-monthly', selectedRegion, selectedCountries, loadYear],
-    queryFn: () => loadProfilesApi.monthlyAverage({ region: selectedRegion, countries: countriesParam, year: loadYear }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return loadProfilesApi.monthlyAverage({ region: selectedRegion, countries, year: loadYear });
+    },
     enabled: !!selectedRegion,
   });
 
   // Fetch hydropower data
   const { data: hydroData, isLoading: hydroLoading, isError: hydroError } = useQuery({
     queryKey: ['hydropower', selectedRegion, selectedCountries],
-    queryFn: () => hydropowerApi.list({ region: selectedRegion, countries: countriesParam, source: 'both' }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return hydropowerApi.list({ region: selectedRegion, countries, source: 'both' });
+    },
     enabled: !!selectedRegion && activeTab === 'hydropower',
   });
 
@@ -127,34 +317,24 @@ export default function DataExplorer() {
   // Fetch resource potential data (only when tab is active)
   const { data: solarPotential } = useQuery({
     queryKey: ['solar-potential', selectedRegion, selectedCountries],
-    queryFn: () => resourcePotentialApi.solarSummary({ region: selectedRegion, countries: countriesParam }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return resourcePotentialApi.solarSummary({ region: selectedRegion, countries });
+    },
     enabled: !!selectedRegion && activeTab === 'renewables',
   });
 
   const { data: windPotential } = useQuery({
     queryKey: ['wind-potential', selectedRegion, selectedCountries],
-    queryFn: () => resourcePotentialApi.windSummary({ region: selectedRegion, countries: countriesParam }),
+    queryFn: () => {
+      const countries = selectedCountries.length > 0 ? selectedCountries : undefined;
+      return resourcePotentialApi.windSummary({ region: selectedRegion, countries });
+    },
     enabled: !!selectedRegion && activeTab === 'renewables',
   });
 
-  // Map layer data queries (fetch only when layer is enabled and map tab is active)
-  const { data: hydroGeoJson } = useQuery({
-    queryKey: ['hydro-geojson', selectedRegion, selectedCountries],
-    queryFn: () => hydropowerApi.geojson({ region: selectedRegion, countries: countriesParam }),
-    enabled: !!selectedRegion && activeTab === 'map' && enabledLayers.includes('hydropower'),
-  });
-
-  const { data: solarGeoJson } = useQuery({
-    queryKey: ['solar-geojson', selectedRegion, selectedCountries],
-    queryFn: () => resourcePotentialApi.solarGeojson({ region: selectedRegion, countries: countriesParam, limit: 500 }),
-    enabled: !!selectedRegion && activeTab === 'map' && enabledLayers.includes('solar_potential'),
-  });
-
-  const { data: windGeoJson } = useQuery({
-    queryKey: ['wind-geojson', selectedRegion, selectedCountries],
-    queryFn: () => resourcePotentialApi.windGeojson({ region: selectedRegion, countries: countriesParam, limit: 500 }),
-    enabled: !!selectedRegion && activeTab === 'map' && enabledLayers.includes('wind_potential'),
-  });
+  // NOTE: Removed hydroGeoJson, solarGeoJson, windGeoJson queries
+  // Map now uses plantsData filtered by technology layers
 
   // Fetch socioeconomic data (uses region countries)
   const { data: socioData, isLoading: socioLoading } = useQuery({
@@ -180,16 +360,40 @@ export default function DataExplorer() {
     enabled: !!selectedRegion && activeTab === 'socioeconomic' && !!regions,
   });
 
-  // Track overall loading state for progress bar
-  const isAnyFetching = plantsFetchingGem || plantsFetchingGppd;
+  // Track overall loading state for progress bar (expanded to include all data fetches)
+  const isAnyFetching = plantsFetchingGem || plantsFetchingGppd || hydroLoading || socioLoading;
 
   useEffect(() => {
     if (isAnyFetching) {
-      startLoading('Loading data for ' + selectedRegion + '...');
+      const loadingTarget = selectedCountries.length > 0
+        ? selectedCountries.join(', ')
+        : currentRegion?.name || selectedRegion;
+      startLoading('Loading data for ' + loadingTarget + '...');
     } else {
       stopLoading();
     }
-  }, [isAnyFetching, selectedRegion, startLoading, stopLoading]);
+  }, [isAnyFetching, selectedRegion, selectedCountries, currentRegion?.name, startLoading, stopLoading]);
+
+  // DEBUG: Log socioeconomic data
+  useEffect(() => {
+    if (socioData?.data) {
+      console.log('[DEBUG] Socio Data:', {
+        count: socioData.count,
+        countriesInData: socioData.data.map((d: any) => d.country),
+        expectedCountries: selectedCountries.length > 0 ? selectedCountries : 'all region countries',
+      });
+    }
+  }, [socioData, selectedCountries]);
+
+  // DEBUG: Log renewables potential data
+  useEffect(() => {
+    if (solarPotential?.by_country) {
+      console.log('[DEBUG] Solar Potential:', {
+        countriesInData: solarPotential.by_country.map((c: any) => c.country),
+        expectedCountries: countriesParam || 'all region countries',
+      });
+    }
+  }, [solarPotential, countriesParam]);
 
   // Renewables.ninja fetch mutation
   const ninjaFetchMutation = useMutation({
@@ -269,29 +473,63 @@ export default function DataExplorer() {
     }));
   }, [ninjaData]);
 
-  const mapCenter: [number, number] = currentRegion?.bbox
-    ? [(currentRegion.bbox[1] + currentRegion.bbox[3]) / 2, (currentRegion.bbox[0] + currentRegion.bbox[2]) / 2]
-    : [-29, 24];
+  const mapCenter: [number, number] = useMemo(() => {
+    if (!currentRegion?.bbox || currentRegion.bbox.length < 4) {
+      return [-29, 24]; // Default fallback (South Africa center)
+    }
+    return [
+      (currentRegion.bbox[1] + currentRegion.bbox[3]) / 2,
+      (currentRegion.bbox[0] + currentRegion.bbox[2]) / 2,
+    ];
+  }, [currentRegion]);
 
-  // Prepare chart data for each source
+  // Prepare chart data for each source - ONLY OPERATING PLANTS
   const techPieDataGem = useMemo(() =>
-    summaryGem?.by_technology?.slice(0, 8).map(t => ({
+    capacityByTechGem.slice(0, 8).map(t => ({
       name: t.technology,
-      value: Math.round(t.total_capacity_mw),
-      fill: getTechColor(t.technology),
-    })) || []
-  , [summaryGem]);
+      value: Math.round(t.capacity),
+      fill: t.color,
+    }))
+  , [capacityByTechGem]);
 
   const techPieDataGppd = useMemo(() =>
-    summaryGppd?.by_technology?.slice(0, 8).map(t => ({
+    capacityByTechGppd.slice(0, 8).map(t => ({
       name: t.technology,
-      value: Math.round(t.total_capacity_mw),
-      fill: getTechColor(t.technology),
-    })) || []
-  , [summaryGppd]);
+      value: Math.round(t.capacity),
+      fill: t.color,
+    }))
+  , [capacityByTechGppd]);
 
   // Get countries available in load data
-  const loadCountries = useMemo(() => loadData?.countries || [], [loadData]);
+  const loadCountries = useMemo(() => {
+    // Use countries from profiles_by_country keys if available, otherwise from countries array
+    if (loadData?.profiles_by_country) {
+      return Object.keys(loadData.profiles_by_country);
+    }
+    return loadData?.countries || [];
+  }, [loadData]);
+
+  // DEBUG: Log load data structure
+  useEffect(() => {
+    if (loadData) {
+      const profilesKeys = loadData.profiles_by_country ? Object.keys(loadData.profiles_by_country) : [];
+      const firstCountry = profilesKeys[0];
+      const firstCountryData = firstCountry && loadData.profiles_by_country ? loadData.profiles_by_country[firstCountry] : null;
+      const firstMonthData = firstCountryData ? firstCountryData[1] : null;
+
+      console.log('[DEBUG] Load Data:', {
+        countries: loadData.countries,
+        profilesKeys,
+        firstCountry,
+        firstMonthData: firstMonthData ? {
+          hours: firstMonthData.hours?.slice(0, 5),
+          values: firstMonthData.values?.slice(0, 5),
+          hoursLength: firstMonthData.hours?.length,
+          valuesLength: firstMonthData.values?.length,
+        } : 'N/A',
+      });
+    }
+  }, [loadData]);
 
   // Compute load chart data with per-country lines
   const loadChartData = useMemo(() => {
@@ -319,8 +557,12 @@ export default function DataExplorer() {
         let count = 0;
         for (const m of monthsToUse) {
           const monthData = countryProfiles[m];
-          if (monthData?.values?.[hour] !== undefined) {
-            sum += monthData.values[hour];
+          if (!monthData?.hours || !monthData?.values) continue;
+
+          // Find the index of this hour in the hours array
+          const hourIndex = monthData.hours.indexOf(hour);
+          if (hourIndex !== -1 && monthData.values[hourIndex] !== undefined) {
+            sum += monthData.values[hourIndex];
             count++;
           }
         }
@@ -333,17 +575,33 @@ export default function DataExplorer() {
     });
   }, [loadData, loadMonths]);
 
-  // Map layers configuration
-  const mapLayers: MapLayer[] = useMemo(() =>
-    DEFAULT_LAYERS.map(layer => ({
+  // Map layers configuration (technology and status)
+  const technologyLayers: MapLayer[] = useMemo(() =>
+    DEFAULT_TECHNOLOGY_LAYERS.map(layer => ({
       ...layer,
-      enabled: enabledLayers.includes(layer.id),
+      enabled: enabledTechLayers.includes(layer.id),
     })),
-    [enabledLayers]
+    [enabledTechLayers]
   );
 
-  const toggleLayer = (layerId: string) => {
-    setEnabledLayers(prev =>
+  const statusLayers: MapLayer[] = useMemo(() =>
+    DEFAULT_STATUS_LAYERS.map(layer => ({
+      ...layer,
+      enabled: enabledStatusLayers.includes(layer.id),
+    })),
+    [enabledStatusLayers]
+  );
+
+  const toggleTechnologyLayer = (layerId: string) => {
+    setEnabledTechLayers(prev =>
+      prev.includes(layerId)
+        ? prev.filter(id => id !== layerId)
+        : [...prev, layerId]
+    );
+  };
+
+  const toggleStatusLayer = (layerId: string) => {
+    setEnabledStatusLayers(prev =>
       prev.includes(layerId)
         ? prev.filter(id => id !== layerId)
         : [...prev, layerId]
@@ -502,6 +760,45 @@ export default function DataExplorer() {
           )}
         </div>
 
+        {/* Export Section */}
+        <div className="card">
+          <h3 className="card-title">
+            <Download size={16} style={{ marginRight: 8 }} />
+            Export Data
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <a
+              href={buildExportUrl('/api/exports/power-plants/csv', selectedRegion, countriesParam, { source: powerPlantSources[0] })}
+              download
+              className="btn btn-secondary"
+              style={{ justifyContent: 'center', textDecoration: 'none' }}
+            >
+              Power Plants (CSV)
+            </a>
+            <a
+              href={buildExportUrl('/api/exports/power-plants/geojson', selectedRegion, countriesParam, { source: powerPlantSources[0] })}
+              download
+              className="btn btn-secondary"
+              style={{ justifyContent: 'center', textDecoration: 'none' }}
+            >
+              Power Plants (GeoJSON)
+            </a>
+            <a
+              href={buildExportUrl('/api/exports/load-profiles/csv', selectedRegion, countriesParam, { year: loadYear.toString() })}
+              download
+              className="btn btn-secondary"
+              style={{ justifyContent: 'center', textDecoration: 'none' }}
+            >
+              Load Profiles (CSV)
+            </a>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--gray-500)', marginTop: 8 }}>
+            {selectedCountries.length > 0
+              ? `Filtered for: ${selectedCountries.join(', ')}`
+              : `All countries in ${currentRegion?.name || selectedRegion}`}
+          </p>
+        </div>
+
       </div>
 
       {/* Main Content */}
@@ -564,9 +861,14 @@ export default function DataExplorer() {
                   ))}
                 </div>
               </div>
-              <SourceInfo source={DATA_SOURCES.power_plants} />
+              <SourceInfo sources={powerPlantSources.map(s => DATA_SOURCES[s]).filter(Boolean)} />
               <div className="map-container-wrapper">
-                <MapLayerControl layers={mapLayers} onToggle={toggleLayer} />
+                <MapLayerControl
+                  technologyLayers={technologyLayers}
+                  statusLayers={statusLayers}
+                  onToggleTechnology={toggleTechnologyLayer}
+                  onToggleStatus={toggleStatusLayer}
+                />
                 <div className="map-container" style={{ height: '100%' }}>
                   <MapContainer
                     center={mapCenter}
@@ -578,12 +880,35 @@ export default function DataExplorer() {
                       url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                     />
 
-                    {/* Power Plants Layer */}
-                    {enabledLayers.includes('power_plants') && plantsData?.plants?.filter(p => p.latitude && p.longitude).map((plant, i) => (
+                    {/* Power Plants - filtered by enabled technology AND status layers */}
+                    {plantsData?.plants?.filter(p => p.latitude && p.longitude).filter(plant => {
+                      // Check if this plant's technology layer is enabled
+                      const tech = (plant.technology || '').toLowerCase();
+                      const techMatch = enabledTechLayers.some(layer => {
+                        if (layer === 'other') {
+                          // "other" matches anything not in the main categories
+                          const mainTechs = ['coal', 'gas', 'oil', 'nuclear', 'hydro', 'solar', 'wind', 'biomass', 'geothermal', 'battery'];
+                          return !mainTechs.some(t => tech.includes(t));
+                        }
+                        return tech.includes(layer);
+                      });
+
+                      // Check if this plant's status layer is enabled
+                      const status = (plant.status || '').toLowerCase();
+                      const statusMatch = enabledStatusLayers.some(layer => {
+                        if (layer === 'operating') return status.includes('operat');
+                        if (layer === 'construction') return status.includes('construct');
+                        if (layer === 'planned') return status.includes('plan') || status.includes('proposed') || status.includes('announced');
+                        if (layer === 'retired') return status.includes('retire') || status.includes('closed') || status.includes('cancel');
+                        return false;
+                      });
+
+                      return techMatch && statusMatch;
+                    }).map((plant, i) => (
                       <CircleMarker
                         key={`plant-${i}`}
                         center={[plant.latitude!, plant.longitude!]}
-                        radius={Math.max(3, Math.min(15, Math.sqrt(plant.capacity_mw) / 5))}
+                        radius={Math.max(3, Math.min(15, Math.sqrt(plant.capacity_mw || 1) / 5))}
                         fillColor={getTechColor(plant.technology)}
                         color={getTechColor(plant.technology)}
                         weight={1}
@@ -592,86 +917,12 @@ export default function DataExplorer() {
                       >
                         <Popup>
                           <strong>{plant.name}</strong><br />
-                          {plant.technology} - {plant.capacity_mw.toLocaleString()} MW<br />
-                          {plant.status}
+                          {plant.technology} - {formatNumber(plant.capacity_mw, '-')} MW<br />
+                          {plant.status}<br />
+                          {plant.country}
                         </Popup>
                       </CircleMarker>
                     ))}
-
-                    {/* Hydropower Layer */}
-                    {enabledLayers.includes('hydropower') && hydroGeoJson?.features?.map((feature: any, i: number) => {
-                      const coords = feature.geometry?.coordinates;
-                      if (!coords || coords.length < 2) return null;
-                      const props = feature.properties || {};
-                      return (
-                        <CircleMarker
-                          key={`hydro-${i}`}
-                          center={[coords[1], coords[0]]}
-                          radius={Math.max(4, Math.min(12, Math.sqrt(props.capacity_mw || 10) / 3))}
-                          fillColor="#0ea5e9"
-                          color="#0284c7"
-                          weight={2}
-                          opacity={0.9}
-                          fillOpacity={0.7}
-                        >
-                          <Popup>
-                            <strong>{props.name}</strong><br />
-                            Hydropower - {(props.capacity_mw || 0).toLocaleString()} MW<br />
-                            {props.status}
-                          </Popup>
-                        </CircleMarker>
-                      );
-                    })}
-
-                    {/* Solar Potential Layer */}
-                    {enabledLayers.includes('solar_potential') && solarGeoJson?.features?.slice(0, 200).map((feature: any, i: number) => {
-                      const coords = feature.geometry?.coordinates;
-                      if (!coords || coords.length < 2) return null;
-                      const props = feature.properties || {};
-                      return (
-                        <CircleMarker
-                          key={`solar-${i}`}
-                          center={[coords[1], coords[0]]}
-                          radius={4}
-                          fillColor="#eab308"
-                          color="#ca8a04"
-                          weight={1}
-                          opacity={0.7}
-                          fillOpacity={0.5}
-                        >
-                          <Popup>
-                            <strong>Solar Site</strong><br />
-                            CF: {((props.capacity_factor || 0) * 100).toFixed(1)}%<br />
-                            {props.country}
-                          </Popup>
-                        </CircleMarker>
-                      );
-                    })}
-
-                    {/* Wind Potential Layer */}
-                    {enabledLayers.includes('wind_potential') && windGeoJson?.features?.slice(0, 200).map((feature: any, i: number) => {
-                      const coords = feature.geometry?.coordinates;
-                      if (!coords || coords.length < 2) return null;
-                      const props = feature.properties || {};
-                      return (
-                        <CircleMarker
-                          key={`wind-${i}`}
-                          center={[coords[1], coords[0]]}
-                          radius={4}
-                          fillColor="#22c55e"
-                          color="#16a34a"
-                          weight={1}
-                          opacity={0.7}
-                          fillOpacity={0.5}
-                        >
-                          <Popup>
-                            <strong>Wind Site</strong><br />
-                            CF: {((props.capacity_factor || 0) * 100).toFixed(1)}%<br />
-                            {props.country}
-                          </Popup>
-                        </CircleMarker>
-                      );
-                    })}
                   </MapContainer>
                 </div>
               </div>
@@ -708,7 +959,7 @@ export default function DataExplorer() {
                 </span>
               </div>
 
-              <SourceInfo source={DATA_SOURCES.power_plants} />
+              <SourceInfo sources={powerPlantSources.map(s => DATA_SOURCES[s]).filter(Boolean)} />
 
               {/* Technology Mix Pie Charts - side by side when multiple sources selected */}
               <div style={{
@@ -720,7 +971,8 @@ export default function DataExplorer() {
                 {powerPlantSources.includes('gem') && (
                   <div>
                     <h4 style={{ marginBottom: 16 }}>
-                      {powerPlantSources.length > 1 ? 'Global Energy Monitor' : 'Technology Mix'}
+                      Operating Capacity - {selectedCountries.length > 0 ? selectedCountries.join(', ') : currentRegion?.name || 'All Countries'}
+                      {powerPlantSources.length > 1 && <span style={{ fontWeight: 400, color: 'var(--gray-500)' }}> (GEM)</span>}
                     </h4>
                     <ResponsiveContainer width="100%" height={280}>
                       <PieChart>
@@ -742,14 +994,15 @@ export default function DataExplorer() {
                       </PieChart>
                     </ResponsiveContainer>
                     <p style={{ textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
-                      Total: {Math.round((summaryGem?.total_capacity_mw || 0) / 1000).toLocaleString()} GW
+                      Total Operating: {Math.round(totalOperatingGem / 1000).toLocaleString()} GW
                     </p>
                   </div>
                 )}
                 {powerPlantSources.includes('gppd') && (
                   <div>
                     <h4 style={{ marginBottom: 16 }}>
-                      {powerPlantSources.length > 1 ? 'Global Power Plant Database' : 'Technology Mix'}
+                      Operating Capacity - {selectedCountries.length > 0 ? selectedCountries.join(', ') : currentRegion?.name || 'All Countries'}
+                      {powerPlantSources.length > 1 && <span style={{ fontWeight: 400, color: 'var(--gray-500)' }}> (GPPD)</span>}
                     </h4>
                     <ResponsiveContainer width="100%" height={280}>
                       <PieChart>
@@ -771,41 +1024,174 @@ export default function DataExplorer() {
                       </PieChart>
                     </ResponsiveContainer>
                     <p style={{ textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
-                      Total: {Math.round((summaryGppd?.total_capacity_mw || 0) / 1000).toLocaleString()} GW
+                      Total Operating: {Math.round(totalOperatingGppd / 1000).toLocaleString()} GW
                     </p>
                   </div>
                 )}
               </div>
 
-              <h4 style={{ margin: '24px 0 16px' }}>Plant List (Top 20 by Capacity)</h4>
-              <div style={{ maxHeight: 300, overflow: 'auto' }}>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Technology</th>
-                      <th>Capacity (MW)</th>
-                      <th>Status</th>
-                      <th>Country</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {plantsData?.plants?.slice(0, 20).map((plant, i) => (
-                      <tr key={i}>
-                        <td>{plant.name}</td>
-                        <td>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: getTechColor(plant.technology) }}></span>
-                            {plant.technology}
-                          </span>
-                        </td>
-                        <td>{plant.capacity_mw.toLocaleString()}</td>
-                        <td>{plant.status}</td>
-                        <td>{plant.country}</td>
+              {/* Capacity by Fuel Type Summary Table - Operating Plants Only */}
+              <div style={{ marginTop: 24 }}>
+                <h4 style={{ marginBottom: 16 }}>
+                  Operating Capacity by Fuel Type (MW) - {selectedCountries.length > 0 ? selectedCountries.join(', ') : currentRegion?.name || 'All Countries'}
+                </h4>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Fuel Type</th>
+                        {powerPlantSources.includes('gem') && <th style={{ textAlign: 'right' }}>GEM</th>}
+                        {powerPlantSources.includes('gppd') && <th style={{ textAlign: 'right' }}>GPPD</th>}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        // Get all unique technologies across both sources
+                        const allTechs = new Set<string>();
+                        capacityByTechGem.forEach(t => allTechs.add(t.technology));
+                        capacityByTechGppd.forEach(t => allTechs.add(t.technology));
+
+                        // Sort by GEM capacity (or GPPD if GEM not selected)
+                        const sortedTechs = Array.from(allTechs).sort((a, b) => {
+                          const aGem = capacityByTechGem.find(t => t.technology === a)?.capacity || 0;
+                          const bGem = capacityByTechGem.find(t => t.technology === b)?.capacity || 0;
+                          const aGppd = capacityByTechGppd.find(t => t.technology === a)?.capacity || 0;
+                          const bGppd = capacityByTechGppd.find(t => t.technology === b)?.capacity || 0;
+                          const aVal = powerPlantSources.includes('gem') ? aGem : aGppd;
+                          const bVal = powerPlantSources.includes('gem') ? bGem : bGppd;
+                          return bVal - aVal;
+                        });
+
+                        return sortedTechs.map(tech => {
+                          const gemData = capacityByTechGem.find(t => t.technology === tech);
+                          const gppdData = capacityByTechGppd.find(t => t.technology === tech);
+                          return (
+                            <tr key={tech}>
+                              <td>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: getTechColor(tech) }}></span>
+                                  {tech}
+                                </span>
+                              </td>
+                              {powerPlantSources.includes('gem') && (
+                                <td style={{ textAlign: 'right' }}>{formatNumber(gemData?.capacity || 0, '-')}</td>
+                              )}
+                              {powerPlantSources.includes('gppd') && (
+                                <td style={{ textAlign: 'right' }}>{formatNumber(gppdData?.capacity || 0, '-')}</td>
+                              )}
+                            </tr>
+                          );
+                        });
+                      })()}
+                      {/* Total row */}
+                      <tr style={{ fontWeight: 600, borderTop: '2px solid var(--gray-300)' }}>
+                        <td>Total</td>
+                        {powerPlantSources.includes('gem') && (
+                          <td style={{ textAlign: 'right' }}>{formatNumber(totalOperatingGem, '-')}</td>
+                        )}
+                        {powerPlantSources.includes('gppd') && (
+                          <td style={{ textAlign: 'right' }}>{formatNumber(totalOperatingGppd, '-')}</td>
+                        )}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Plant List with Sortable Table */}
+              <div style={{ marginTop: 24 }}>
+                {/* Header with count and filters */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                  <h4 style={{ margin: 0 }}>
+                    Plant List ({filteredPlants.length} of {plantsData?.count || 0} plants)
+                  </h4>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--gray-600)' }}>Technology</label>
+                      <select
+                        value={plantTechFilter}
+                        onChange={(e) => setPlantTechFilter(e.target.value)}
+                        className="form-select"
+                        style={{ minWidth: 140 }}
+                      >
+                        <option value="all">All</option>
+                        {uniqueTechnologies.map(tech => (
+                          <option key={tech} value={tech}>{tech}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--gray-600)' }}>Status</label>
+                      <select
+                        value={plantStatusFilter}
+                        onChange={(e) => setPlantStatusFilter(e.target.value)}
+                        className="form-select"
+                        style={{ minWidth: 130 }}
+                      >
+                        <option value="all">All</option>
+                        {uniqueStatuses.map(status => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sortable table */}
+                <div style={{ maxHeight: 500, overflow: 'auto' }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        {[
+                          { key: 'name', label: 'Name' },
+                          { key: 'technology', label: 'Technology' },
+                          { key: 'capacity_mw', label: 'Capacity (MW)' },
+                          { key: 'status', label: 'Status' },
+                          { key: 'country', label: 'Country' },
+                        ].map(col => (
+                          <th
+                            key={col.key}
+                            onClick={() => handlePlantSort(col.key as any)}
+                            style={{
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              {col.label}
+                              <span style={{ color: plantSortColumn === col.key ? 'var(--primary)' : 'var(--gray-300)', fontSize: 12 }}>
+                                {plantSortColumn === col.key ? (plantSortDirection === 'asc' ? '▲' : '▼') : '▲▼'}
+                              </span>
+                            </span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPlants.map((plant, i) => (
+                        <tr key={i}>
+                          <td>{plant.name}</td>
+                          <td>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: getTechColor(plant.technology) }}></span>
+                              {plant.technology}
+                            </span>
+                          </td>
+                          <td>{formatNumber(plant.capacity_mw, '-')}</td>
+                          <td>{plant.status}</td>
+                          <td>{plant.country}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {filteredPlants.length === 0 && (
+                  <p style={{ textAlign: 'center', color: 'var(--gray-500)', padding: 24 }}>
+                    No plants match your filters.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -1257,29 +1643,80 @@ export default function DataExplorer() {
                 onMonthsChange={setLoadMonths}
                 multiSelect
               />
-              <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={loadChartData}>
-                  <XAxis dataKey="hour" label={{ value: 'Hour', position: 'bottom' }} />
-                  <YAxis domain={[0, 1]} label={{ value: 'Normalized Load', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip formatter={(value) => typeof value === 'number' ? value.toFixed(3) : value} />
-                  {loadCountries.length > 1 && <Legend />}
+
+              {/* Show legend separately above chart when multiple countries */}
+              {loadCountries.length > 1 && (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '8px 16px',
+                  marginBottom: 12,
+                  padding: '8px 12px',
+                  background: 'var(--gray-50)',
+                  borderRadius: 6,
+                }}>
                   {loadCountries.map((country: string, idx: number) => (
-                    <Line
-                      key={country}
-                      type="monotone"
-                      dataKey={country}
-                      name={country}
-                      stroke={['#2563eb', '#dc2626', '#22c55e', '#f97316', '#7c3aed', '#0ea5e9', '#eab308', '#ec4899', '#14b8a6', '#8b5cf6', '#f43f5e', '#06b6d4'][idx % 12]}
-                      strokeWidth={2}
-                      dot={false}
-                    />
+                    <div key={country} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        width: 12,
+                        height: 3,
+                        backgroundColor: ['#2563eb', '#dc2626', '#22c55e', '#f97316', '#7c3aed', '#0ea5e9', '#eab308', '#ec4899', '#14b8a6', '#8b5cf6', '#f43f5e', '#06b6d4'][idx % 12],
+                        borderRadius: 1,
+                      }} />
+                      <span style={{ fontSize: 13, color: 'var(--gray-700)' }}>{country}</span>
+                    </div>
                   ))}
-                </LineChart>
-              </ResponsiveContainer>
-              <p style={{ color: '#6b7280', fontSize: 14, marginTop: 8 }}>
-                Values normalized to [0, 1]. Peak load = 1.0.
-                {loadCountries.length > 1 ? ` Showing ${loadCountries.length} countries.` : ''}
-              </p>
+                </div>
+              )}
+
+              {loadChartData.length === 0 ? (
+                <div style={{ padding: 24, background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 8, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <Info size={20} style={{ color: 'var(--gray-500)', flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <p style={{ fontWeight: 500, color: 'var(--gray-700)', marginBottom: 4 }}>No Load Profile Data</p>
+                    <p style={{ color: 'var(--gray-600)', fontSize: 14 }}>
+                      No load profile data available for {selectedCountries.length > 0 ? `the selected countries (${selectedCountries.join(', ')})` : `the ${currentRegion?.name || 'selected region'}`}.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={loadChartData} margin={{ top: 5, right: 20, bottom: 25, left: 10 }}>
+                      <XAxis
+                        dataKey="hour"
+                        label={{ value: 'Hour of Day', position: 'bottom', offset: 0 }}
+                        tickFormatter={(h) => `${h}:00`}
+                      />
+                      <YAxis
+                        domain={[0, 1]}
+                        label={{ value: 'Normalized Load', angle: -90, position: 'insideLeft', offset: 10 }}
+                        tickFormatter={(v) => v.toFixed(1)}
+                      />
+                      <Tooltip
+                        formatter={(value) => typeof value === 'number' ? value.toFixed(3) : value}
+                        labelFormatter={(h) => `Hour ${h}:00`}
+                      />
+                      {loadCountries.map((country: string, idx: number) => (
+                        <Line
+                          key={country}
+                          type="monotone"
+                          dataKey={country}
+                          name={country}
+                          stroke={['#2563eb', '#dc2626', '#22c55e', '#f97316', '#7c3aed', '#0ea5e9', '#eab308', '#ec4899', '#14b8a6', '#8b5cf6', '#f43f5e', '#06b6d4'][idx % 12]}
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <p style={{ color: '#6b7280', fontSize: 14, marginTop: 8 }}>
+                    Values normalized to [0, 1]. Peak load = 1.0.
+                    {loadCountries.length > 1 ? ` Showing ${loadCountries.length} countries.` : ''}
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>

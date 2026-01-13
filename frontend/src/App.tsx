@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom';
-import { Database, Map, BarChart3, Info, ShieldCheck, Settings as SettingsIcon, Code, Download } from 'lucide-react';
+import { Database, Map, BarChart3, Info, ShieldCheck, Settings as SettingsIcon, Code } from 'lucide-react';
 import { ApiKeyProvider } from './contexts/ApiKeyContext';
 import { LoadingProvider, useLoading } from './contexts/LoadingContext';
 import LoadingProgress from './components/LoadingProgress';
@@ -11,7 +11,7 @@ import DataQuality from './pages/DataQuality';
 import Settings from './pages/Settings';
 import './App.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'; // Used for API docs link
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -50,23 +50,6 @@ function AppContent() {
                     <Code size={18} />
                     API
                   </a>
-                  <div className="nav-dropdown">
-                    <button className="nav-link nav-dropdown-trigger">
-                      <Download size={18} />
-                      Export
-                    </button>
-                    <div className="nav-dropdown-content">
-                      <a href={`${API_BASE_URL}/api/exports/power-plants/csv?region=sapp`} download>
-                        Power Plants (CSV)
-                      </a>
-                      <a href={`${API_BASE_URL}/api/exports/power-plants/geojson?region=sapp`} download>
-                        Power Plants (GeoJSON)
-                      </a>
-                      <a href={`${API_BASE_URL}/api/exports/load-profiles/csv?region=sapp&year=2020`} download>
-                        Load Profiles (CSV)
-                      </a>
-                    </div>
-                  </div>
                   <NavLink to="/settings" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
                     <SettingsIcon size={18} />
                     Settings

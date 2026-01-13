@@ -13,12 +13,21 @@ export interface DataSource {
 }
 
 interface SourceInfoProps {
-  source: DataSource;
+  source?: DataSource;
+  sources?: DataSource[];  // Support multiple sources
   defaultExpanded?: boolean;
 }
 
-export default function SourceInfo({ source, defaultExpanded = false }: SourceInfoProps) {
+export default function SourceInfo({ source, sources, defaultExpanded = false }: SourceInfoProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  // Support both single source and multiple sources
+  const allSources = sources || (source ? [source] : []);
+
+  // Guard against no sources
+  if (allSources.length === 0) {
+    return null;
+  }
 
   return (
     <div className="source-info">
@@ -26,47 +35,63 @@ export default function SourceInfo({ source, defaultExpanded = false }: SourceIn
         className="source-info-toggle"
         onClick={() => setExpanded(!expanded)}
       >
-        <span>About this data</span>
+        <span>About this data {allSources.length > 1 && `(${allSources.length} sources)`}</span>
         {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
 
       {expanded && (
         <div className="source-info-content">
-          <div className="source-info-grid">
-            <div className="source-info-item">
-              <span className="source-info-label">Source</span>
-              <a href={source.url} target="_blank" rel="noopener noreferrer" className="source-info-link">
-                {source.name} <ExternalLink size={12} />
-              </a>
-            </div>
-            <div className="source-info-item">
-              <span className="source-info-label">Provider</span>
-              <span>{source.provider}</span>
-            </div>
-            <div className="source-info-item">
-              <span className="source-info-label">License</span>
-              <span>{source.license}</span>
-            </div>
-            <div className="source-info-item">
-              <span className="source-info-label">Updates</span>
-              <span>{source.update_frequency}</span>
-            </div>
-          </div>
+          {allSources.map((src, index) => (
+            <div key={src.name} style={{ marginBottom: index < allSources.length - 1 ? 16 : 0 }}>
+              {allSources.length > 1 && (
+                <h5 style={{
+                  margin: '0 0 12px 0',
+                  paddingBottom: 8,
+                  borderBottom: '1px solid var(--gray-200)',
+                  color: 'var(--gray-700)',
+                  fontSize: 14,
+                  fontWeight: 600
+                }}>
+                  {src.name}
+                </h5>
+              )}
+              <div className="source-info-grid">
+                <div className="source-info-item">
+                  <span className="source-info-label">Source</span>
+                  <a href={src.url} target="_blank" rel="noopener noreferrer" className="source-info-link">
+                    {src.name} <ExternalLink size={12} />
+                  </a>
+                </div>
+                <div className="source-info-item">
+                  <span className="source-info-label">Provider</span>
+                  <span>{src.provider}</span>
+                </div>
+                <div className="source-info-item">
+                  <span className="source-info-label">License</span>
+                  <span>{src.license}</span>
+                </div>
+                <div className="source-info-item">
+                  <span className="source-info-label">Updates</span>
+                  <span>{src.update_frequency}</span>
+                </div>
+              </div>
 
-          <p className="source-info-description">{source.description}</p>
+              <p className="source-info-description">{src.description}</p>
 
-          {source.columns && Object.keys(source.columns).length > 0 && (
-            <div className="source-info-columns">
-              <span className="source-info-label">Data Fields</span>
-              <ul>
-                {Object.entries(source.columns).map(([col, desc]) => (
-                  <li key={col}>
-                    <code>{col}</code>: {desc}
-                  </li>
-                ))}
-              </ul>
+              {src.columns && Object.keys(src.columns).length > 0 && (
+                <div className="source-info-columns">
+                  <span className="source-info-label">Data Fields</span>
+                  <ul>
+                    {Object.entries(src.columns).map(([col, desc]) => (
+                      <li key={col}>
+                        <code>{col}</code>: {desc}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
@@ -75,6 +100,7 @@ export default function SourceInfo({ source, defaultExpanded = false }: SourceIn
 
 // Data sources metadata - matches sources.json
 export const DATA_SOURCES: Record<string, DataSource> = {
+  // Legacy key for backwards compatibility
   power_plants: {
     name: 'Global Integrated Power',
     provider: 'Global Energy Monitor',
@@ -90,6 +116,43 @@ export const DATA_SOURCES: Record<string, DataSource> = {
       country: 'Country name',
       latitude: 'Geographic latitude',
       longitude: 'Geographic longitude',
+    },
+  },
+  // GEM - Global Energy Monitor
+  gem: {
+    name: 'Global Integrated Power (GEM)',
+    provider: 'Global Energy Monitor',
+    url: 'https://globalenergymonitor.org/',
+    license: 'CC-BY',
+    description: 'Comprehensive database of power generation facilities worldwide, including coal, gas, oil, nuclear, hydro, solar, wind, and other technologies. Updated quarterly with global coverage.',
+    update_frequency: 'quarterly',
+    columns: {
+      name: 'Plant or project name',
+      technology: 'Generation technology (Solar, Wind, Hydro, etc.)',
+      capacity_mw: 'Installed capacity in megawatts',
+      status: 'Operating status (Operating, Construction, etc.)',
+      country: 'Country name',
+      latitude: 'Geographic latitude',
+      longitude: 'Geographic longitude',
+    },
+  },
+  // GPPD - Global Power Plant Database
+  gppd: {
+    name: 'Global Power Plant Database (GPPD)',
+    provider: 'World Resources Institute',
+    url: 'https://datasets.wri.org/dataset/globalpowerplantdatabase',
+    license: 'CC-BY 4.0',
+    description: 'A comprehensive, open source database of power plants around the world. Contains data on approximately 35,000 power plants from 167 countries.',
+    update_frequency: 'static (June 2021)',
+    columns: {
+      name: 'Plant name',
+      technology: 'Primary fuel type',
+      capacity_mw: 'Installed capacity in megawatts',
+      country: 'Country name',
+      latitude: 'Geographic latitude',
+      longitude: 'Geographic longitude',
+      commissioning_year: 'Year of commissioning',
+      owner: 'Plant owner',
     },
   },
   load_profiles: {
@@ -124,11 +187,11 @@ export const DATA_SOURCES: Record<string, DataSource> = {
     },
   },
   hydropower: {
-    name: 'African Hydropower Atlas & Global Hydropower Tracker',
+    name: 'African Hydropower Atlas & Global Energy Monitor',
     provider: 'IHA / Global Energy Monitor',
     url: 'https://www.hydropower.org/',
     license: 'Various',
-    description: 'Hydropower plant data including capacity, location, and climate scenarios',
+    description: 'Hydropower plant data from African Hydropower Atlas (with river/reservoir info) and Global Integrated Power (hydropower filtered)',
     update_frequency: 'annual',
     columns: {
       name: 'Plant name',

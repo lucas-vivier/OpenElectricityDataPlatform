@@ -251,7 +251,7 @@ async def check_data_availability(
     data_sources = {
         "power_plants": data_source_exists("global_integrated_power_plants"),
         "load_profiles": True,  # Synthetic data always available
-        "hydropower": data_source_exists("african_hydro_atlas") or data_source_exists("global_hydro_tracker"),
+        "hydropower": data_source_exists("african_hydro_atlas") or data_source_exists("global_integrated_power_plants"),
         "solar_potential": data_source_exists("irena_solar_msr"),
         "wind_potential": data_source_exists("irena_wind_msr"),
         "socioeconomic": data_source_exists("owid_energy"),
