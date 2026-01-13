@@ -2,10 +2,17 @@
 
 Provides unified functions to load power plants, load profiles, and RE profiles
 from local files or remote sources.
+
+Loading cascade:
+1. Local parquet files (fastest, preprocessed)
+2. Zenodo (pre-processed data, downloaded on demand)
+3. Source files (raw data, requires processing)
+4. Mock data (for development only)
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -14,7 +21,7 @@ import pandas as pd
 from ..config import get_settings
 from ..config.data_paths import get_data_source_path, data_source_exists, get_local_region_path
 from ..config.regions import get_countries_for_region
-from .sources.power_plants import load_global_integrated_power_data, filter_by_country
+from .sources.power_plants import load_global_integrated_power_data, load_gppd_data, filter_by_country
 from .sources.load_profiles import load_toktarova_data, generate_mock_load_profiles
 from .sources.renewables import fetch_renewables_ninja
 from .sources.hydropower import (
@@ -29,6 +36,26 @@ from .sources.irena import (
     summarize_msr_by_country,
     load_processed_re_profiles,
 )
+from .zenodo import ensure_region_data
+
+logger = logging.getLogger(__name__)
+
+
+def _cache_to_local(df: pd.DataFrame, region: str, filename: str) -> None:
+    """Cache a DataFrame to local parquet file for future use.
+
+    Args:
+        df: DataFrame to cache
+        region: Region identifier
+        filename: Name of the parquet file (e.g., 'power_plants.parquet')
+    """
+    try:
+        local_path = _get_local_data_path(region) / filename
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(local_path, index=False)
+        logger.info(f"Cached {filename} for region {region} to {local_path}")
+    except Exception as e:
+        logger.warning(f"Failed to cache {filename} for {region}: {e}")
 
 
 def _get_local_data_path(region: str) -> Path:
@@ -36,38 +63,89 @@ def _get_local_data_path(region: str) -> Path:
     return get_local_region_path(region)
 
 
+def _try_zenodo_fallback(region: str, filename: str) -> Optional[Path]:
+    """Try to download data from Zenodo if local file doesn't exist.
+
+    Args:
+        region: Region identifier
+        filename: Name of the file to check/download (e.g., 'power_plants.parquet')
+
+    Returns:
+        Path to the local file if download succeeded, None otherwise
+    """
+    local_path = _get_local_data_path(region) / filename
+    if local_path.exists():
+        return local_path
+
+    # Try downloading from Zenodo
+    settings = get_settings()
+    if settings.zenodo_enabled:
+        try:
+            logger.info(f"Attempting to download {filename} for {region} from Zenodo...")
+            if ensure_region_data(region, files=[filename]):
+                if local_path.exists():
+                    logger.info(f"Successfully downloaded {filename} from Zenodo")
+                    return local_path
+        except Exception as e:
+            logger.warning(f"Zenodo download failed for {region}/{filename}: {e}")
+
+    return None
+
+
 def load_power_plants(
     region: str,
     countries: List[str],
     source_path: Optional[Path] = None,
+    source: str = "gem",
 ) -> Optional[pd.DataFrame]:
     """Load power plant data for the specified region and countries.
 
     Args:
         region: Region identifier (e.g., 'south_africa')
         countries: List of country names to include
-        source_path: Optional path to Global Integrated Power Excel file. If None, uses default.
+        source_path: Optional path to data file. If None, uses default.
+        source: Data source to use - 'gem' for Global Energy Monitor (default),
+                'gppd' for Global Power Plant Database
 
     Returns:
         DataFrame with columns: name, technology, capacity_mw, status, status_category,
         country, latitude, longitude, fuel, start_year, retired_year
         Returns None if no data found.
     """
-    # Try local parquet first (cached preprocessed data)
+    # For GPPD source, use dedicated loader
+    if source == "gppd":
+        gppd_path = get_data_source_path("global_power_plant_database")
+        if gppd_path and gppd_path.exists():
+            df = load_gppd_data(gppd_path, countries)
+            return df
+        return _generate_mock_power_plants(countries)
+
+    # GEM source (default) - try local parquet first (cached preprocessed data)
     local_path = _get_local_data_path(region) / "power_plants.parquet"
     if local_path.exists():
         df = pd.read_parquet(local_path)
         return filter_by_country(df, countries) if countries else df
 
+    # Try Zenodo fallback
+    zenodo_path = _try_zenodo_fallback(region, "power_plants.parquet")
+    if zenodo_path:
+        df = pd.read_parquet(zenodo_path)
+        return filter_by_country(df, countries) if countries else df
+
     # Try custom source path
     if source_path is not None and source_path.exists():
         df = load_global_integrated_power_data(source_path, countries)
+        if df is not None and not df.empty:
+            _cache_to_local(df, region, "power_plants.parquet")
         return df
 
     # Try default Global Integrated Power data source
     gip_path = get_data_source_path("global_integrated_power_plants")
     if gip_path and gip_path.exists():
+        logger.info(f"Processing power plants from source file for region {region}...")
         df = load_global_integrated_power_data(gip_path, countries)
+        if df is not None and not df.empty:
+            _cache_to_local(df, region, "power_plants.parquet")
         return df
 
     # Return mock data for development only
@@ -100,9 +178,21 @@ def load_load_profiles(
             df = df[df["zone"].isin(countries)]
         return df
 
+    # Try Zenodo fallback
+    zenodo_path = _try_zenodo_fallback(region, "load_profiles.parquet")
+    if zenodo_path:
+        df = pd.read_parquet(zenodo_path)
+        if countries:
+            df = df[df["zone"].isin(countries)]
+        return df
+
     # Try loading from Toktarova
     if source_path is not None and source_path.exists():
-        return load_toktarova_data(source_path, countries, year)
+        logger.info(f"Processing load profiles from source file for region {region}...")
+        df = load_toktarova_data(source_path, countries, year)
+        if df is not None and not df.empty:
+            _cache_to_local(df, region, "load_profiles.parquet")
+        return df
 
     # Return mock data for development
     return generate_mock_load_profiles(countries, year)
@@ -136,6 +226,14 @@ def load_re_profiles(
     local_path = _get_local_data_path(region) / f"re_profiles_{tech}.parquet"
     if local_path.exists():
         df = pd.read_parquet(local_path)
+        if countries:
+            df = df[df["zone"].isin(countries)]
+        return df
+
+    # Try Zenodo fallback
+    zenodo_path = _try_zenodo_fallback(region, f"re_profiles_{tech}.parquet")
+    if zenodo_path:
+        df = pd.read_parquet(zenodo_path)
         if countries:
             df = df[df["zone"].isin(countries)]
         return df
@@ -184,6 +282,14 @@ def load_hydropower(
             df = df[df["country"].isin(countries)]
         return df
 
+    # Try Zenodo fallback
+    zenodo_path = _try_zenodo_fallback(region, "hydropower.parquet")
+    if zenodo_path:
+        df = pd.read_parquet(zenodo_path)
+        if countries:
+            df = df[df["country"].isin(countries)]
+        return df
+
     dfs = []
 
     # Load from African Hydropower Atlas
@@ -211,7 +317,10 @@ def load_hydropower(
                     print(f"Error loading Global Hydro Tracker: {e}")
 
     if dfs:
-        return pd.concat(dfs, ignore_index=True)
+        df = pd.concat(dfs, ignore_index=True)
+        # Cache the result for future use
+        _cache_to_local(df, region, "hydropower.parquet")
+        return df
 
     return None
 
@@ -281,14 +390,26 @@ def load_resource_potential(
             df = df[df["country"].isin(countries)]
         return df
 
+    # Try Zenodo fallback
+    zenodo_path = _try_zenodo_fallback(region, f"resource_potential_{technology}.parquet")
+    if zenodo_path:
+        df = pd.read_parquet(zenodo_path)
+        if countries:
+            df = df[df["country"].isin(countries)]
+        return df
+
     # Load from IRENA MSR files
     if technology == "solar":
         msr_path = get_data_source_path("irena_solar_msr")
         if msr_path and msr_path.exists():
             try:
-                return load_irena_solar_msr(
+                logger.info(f"Processing solar resource potential from source file for region {region}...")
+                df = load_irena_solar_msr(
                     msr_path, countries, include_hourly=include_hourly, verbose=verbose
                 )
+                if df is not None and not df.empty:
+                    _cache_to_local(df, region, f"resource_potential_{technology}.parquet")
+                return df
             except Exception as e:
                 if verbose:
                     print(f"Error loading IRENA solar MSR: {e}")
@@ -296,9 +417,13 @@ def load_resource_potential(
         msr_path = get_data_source_path("irena_wind_msr")
         if msr_path and msr_path.exists():
             try:
-                return load_irena_wind_msr(
+                logger.info(f"Processing wind resource potential from source file for region {region}...")
+                df = load_irena_wind_msr(
                     msr_path, countries, include_hourly=include_hourly, verbose=verbose
                 )
+                if df is not None and not df.empty:
+                    _cache_to_local(df, region, f"resource_potential_{technology}.parquet")
+                return df
             except Exception as e:
                 if verbose:
                     print(f"Error loading IRENA wind MSR: {e}")

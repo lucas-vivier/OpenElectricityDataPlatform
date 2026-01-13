@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Loader2, CheckCircle, AlertCircle, AlertTriangle, XCircle, Database, ChevronRight } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, AlertTriangle, XCircle, Database, ChevronRight, RefreshCw } from 'lucide-react';
 import { regionsApi, dataQualityApi, type CountryQuality } from '../api/client';
 import 'leaflet/dist/leaflet.css';
 
@@ -53,6 +53,7 @@ function MapBoundsUpdater({ bbox }: { bbox?: number[] }) {
 export default function DataQuality() {
   const [selectedRegion, setSelectedRegion] = useState('southern_africa');
   const [selectedCountry, setSelectedCountry] = useState<CountryQuality | null>(null);
+  const [showFullAssessment, setShowFullAssessment] = useState(false);
 
   // Fetch regions
   const { data: regions } = useQuery({
@@ -60,11 +61,18 @@ export default function DataQuality() {
     queryFn: regionsApi.list,
   });
 
-  // Fetch quality data for region
-  const { data: qualityData, isLoading: qualityLoading } = useQuery({
+  // Fast availability check (default)
+  const { data: availabilityData, isLoading: availabilityLoading } = useQuery({
+    queryKey: ['data-availability', selectedRegion],
+    queryFn: () => dataQualityApi.availability({ region: selectedRegion }),
+    enabled: !!selectedRegion,
+  });
+
+  // Full quality assessment (only when requested)
+  const { data: qualityData, isLoading: qualityLoading, refetch: refetchQuality } = useQuery({
     queryKey: ['data-quality', selectedRegion],
     queryFn: () => dataQualityApi.region({ region: selectedRegion }),
-    enabled: !!selectedRegion,
+    enabled: !!selectedRegion && showFullAssessment,
   });
 
   const currentRegion = regions?.find(r => r.id === selectedRegion);
@@ -122,55 +130,101 @@ export default function DataQuality() {
           </div>
         </div>
 
-        {qualityLoading ? (
+        {availabilityLoading ? (
           <div className="card">
             <div className="loading"><Loader2 className="animate-spin" /></div>
           </div>
-        ) : qualityData?.summary && (
+        ) : availabilityData && (
           <>
             <div className="card">
               <h3 className="card-title">Region Summary</h3>
               <div className="stats">
                 <div className="stat">
-                  <div className="stat-value">{qualityData.summary.total_countries}</div>
+                  <div className="stat-value">{availabilityData.total_countries}</div>
                   <div className="stat-label">Countries</div>
                 </div>
                 <div className="stat">
-                  <div className="stat-value">{qualityData.summary.average_score.toFixed(0)}%</div>
-                  <div className="stat-label">Avg Score</div>
+                  <div className="stat-value">
+                    {Object.values(availabilityData.data_sources).filter(Boolean).length}
+                  </div>
+                  <div className="stat-label">Sources</div>
                 </div>
               </div>
             </div>
 
             <div className="card">
-              <h3 className="card-title">Quality Distribution</h3>
-              <ResponsiveContainer width="100%" height={150}>
-                <PieChart>
-                  <Pie
-                    data={qualityDistribution}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={30}
-                    outerRadius={55}
-                  >
-                    {qualityDistribution.map((entry, index) => (
-                      <Cell key={index} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="quality-legend">
-                {qualityDistribution.map((item) => (
-                  <span key={item.name} className="legend-item">
-                    <span className="legend-color" style={{ backgroundColor: item.fill }}></span>
-                    {item.name}: {item.value}
-                  </span>
+              <h3 className="card-title">Data Sources</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {Object.entries(availabilityData.data_sources).map(([name, available]) => (
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    {available ? (
+                      <CheckCircle size={16} color="#22c55e" />
+                    ) : (
+                      <XCircle size={16} color="#9ca3af" />
+                    )}
+                    <span style={{ color: available ? '#374151' : '#9ca3af' }}>
+                      {name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>
+
+            <div className="card">
+              <h3 className="card-title">Detailed Assessment</h3>
+              <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>
+                Run a full quality assessment to see completeness scores and data quality metrics.
+              </p>
+              <button
+                className="btn btn-primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => {
+                  setShowFullAssessment(true);
+                  refetchQuality();
+                }}
+                disabled={qualityLoading}
+              >
+                {qualityLoading ? (
+                  <><Loader2 size={16} className="animate-spin" /> Analyzing...</>
+                ) : qualityData ? (
+                  <><RefreshCw size={16} /> Refresh Assessment</>
+                ) : (
+                  <><RefreshCw size={16} /> Run Full Assessment</>
+                )}
+              </button>
+            </div>
+
+            {qualityData?.summary && (
+              <div className="card">
+                <h3 className="card-title">Quality Distribution</h3>
+                <ResponsiveContainer width="100%" height={150}>
+                  <PieChart>
+                    <Pie
+                      data={qualityDistribution}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={55}
+                    >
+                      {qualityDistribution.map((entry, index) => (
+                        <Cell key={index} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="quality-legend">
+                  {qualityDistribution.map((item) => (
+                    <span key={item.name} className="legend-item">
+                      <span className="legend-color" style={{ backgroundColor: item.fill }}></span>
+                      {item.name}: {item.value}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

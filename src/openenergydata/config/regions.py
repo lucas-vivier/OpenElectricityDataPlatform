@@ -146,3 +146,27 @@ def get_all_countries() -> List[str]:
         all_countries.update(region_info.get("countries", []))
 
     return sorted(all_countries)
+
+
+def get_country_centroid(country: str) -> Optional[Dict[str, float]]:
+    """Get the centroid coordinates for a country.
+
+    Args:
+        country: Country name
+
+    Returns:
+        Dict with 'lat' and 'lon' keys, or None if not found.
+    """
+    regions = get_regions()
+    centroids = regions.get("country_centroids", {})
+
+    if country in centroids:
+        return centroids[country]
+
+    # Try fuzzy matching
+    available_countries = list(centroids.keys())
+    resolved = resolve_country_name(country, available_countries)
+    if resolved:
+        return centroids[resolved]
+
+    return None

@@ -176,6 +176,25 @@ export interface QualitySummaryResponse {
   countries_by_level: Record<string, Array<{ country: string; score: number }>>;
 }
 
+// Lightweight availability types
+export interface DatasetAvailability {
+  available: boolean;
+  source: string;
+  source_exists: boolean;
+}
+
+export interface CountryAvailability {
+  country: string;
+  datasets: Record<string, DatasetAvailability>;
+}
+
+export interface RegionAvailabilityResponse {
+  region: string;
+  total_countries: number;
+  data_sources: Record<string, boolean>;
+  countries: CountryAvailability[];
+}
+
 // API functions
 export const regionsApi = {
   list: () => api.get<{ regions: Region[] }>('/api/regions').then(r => r.data.regions),
@@ -184,16 +203,16 @@ export const regionsApi = {
 };
 
 export const powerPlantsApi = {
-  list: (params: { region: string; countries?: string[]; technology?: string; status?: string }) =>
+  list: (params: { region: string; countries?: string[]; technology?: string; status?: string; source?: string }) =>
     api.get<PowerPlantsResponse>('/api/power-plants', { params }).then(r => r.data),
 
-  summary: (params: { region: string; countries?: string[]; status?: string }) =>
+  summary: (params: { region: string; countries?: string[]; status?: string; source?: string }) =>
     api.get<{ count: number; total_capacity_mw: number; by_technology: TechnologySummary[] }>(
       '/api/power-plants/summary',
       { params }
     ).then(r => r.data),
 
-  geojson: (params: { region: string; countries?: string[]; technology?: string }) =>
+  geojson: (params: { region: string; countries?: string[]; technology?: string; source?: string }) =>
     api.get('/api/power-plants/geojson', { params }).then(r => r.data),
 };
 
@@ -211,12 +230,38 @@ export const loadProfilesApi = {
     api.get('/api/load-profiles/monthly-average', { params }).then(r => r.data),
 };
 
+export interface RenewablesNinjaResponse {
+  location: { lat: number; lon: number };
+  technology: string;
+  year: number;
+  count: number;
+  mean_cf: number;
+  data: Array<{
+    zone: string;
+    month: number;
+    day: number;
+    hour: number;
+    capacity_factor: number;
+  }>;
+}
+
+export interface CountryCentroid {
+  lat: number;
+  lon: number;
+}
+
 export const renewablesApi = {
   list: (params: { region: string; technology: string; countries?: string[]; year?: number; limit?: number }) =>
     api.get('/api/renewables', { params }).then(r => r.data),
 
   daily: (params: { region: string; technology: string; countries?: string[]; year: number; month: number; day: number }) =>
     api.get('/api/renewables/daily', { params }).then(r => r.data),
+
+  fetchFromNinja: (params: { lat: number; lon: number; year: number; technology: string; api_key: string }) =>
+    api.get<RenewablesNinjaResponse>('/api/renewables/fetch', { params }).then(r => r.data),
+
+  getCountryCentroid: (country: string) =>
+    api.get<CountryCentroid>('/api/regions/country-centroid', { params: { country } }).then(r => r.data),
 };
 
 export const treatmentsApi = {
@@ -318,4 +363,7 @@ export const dataQualityApi = {
 
   summary: (params: { region: string }) =>
     api.get<QualitySummaryResponse>('/api/data-quality/summary', { params }).then(r => r.data),
+
+  availability: (params: { region: string }) =>
+    api.get<RegionAvailabilityResponse>('/api/data-quality/availability', { params }).then(r => r.data),
 };

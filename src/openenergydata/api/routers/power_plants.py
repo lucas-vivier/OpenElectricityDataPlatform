@@ -48,10 +48,11 @@ async def get_power_plants(
     technology: Optional[str] = Query(None, description="Filter by technology"),
     status: Optional[str] = Query(None, description="Filter by status (e.g., 'Operating')"),
     min_capacity: Optional[float] = Query(None, description="Minimum capacity in MW"),
+    source: str = Query("gem", description="Data source: 'gem' (Global Energy Monitor) or 'gppd' (Global Power Plant Database)"),
 ):
     """Get power plants for a region."""
     # Load data
-    df = load_power_plants(region, countries or [])
+    df = load_power_plants(region, countries or [], source=source)
 
     if df is None or df.empty:
         return PowerPlantsResponse(count=0, total_capacity_mw=0, plants=[])
@@ -92,9 +93,10 @@ async def get_power_plants_summary(
     region: str = Query(..., description="Region ID"),
     countries: Optional[List[str]] = Query(None, description="Filter by specific countries"),
     status: Optional[str] = Query("Operating", description="Filter by status"),
+    source: str = Query("gem", description="Data source: 'gem' or 'gppd'"),
 ):
     """Get summary statistics for power plants."""
-    df = load_power_plants(region, countries or [])
+    df = load_power_plants(region, countries or [], source=source)
 
     if df is None or df.empty:
         return SummaryResponse(count=0, total_capacity_mw=0, by_technology=[])
@@ -122,9 +124,10 @@ async def get_power_plants_geojson(
     region: str = Query(..., description="Region ID"),
     countries: Optional[List[str]] = Query(None, description="Filter by specific countries"),
     technology: Optional[str] = Query(None, description="Filter by technology"),
+    source: str = Query("gem", description="Data source: 'gem' or 'gppd'"),
 ):
     """Get power plants as GeoJSON FeatureCollection."""
-    df = load_power_plants(region, countries or [])
+    df = load_power_plants(region, countries or [], source=source)
 
     if df is None or df.empty:
         return {"type": "FeatureCollection", "features": []}

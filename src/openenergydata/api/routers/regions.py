@@ -1,10 +1,10 @@
 """Regions API router."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
 
-from ...config import get_regions, get_countries_for_region, get_region_bbox
+from ...config import get_regions, get_countries_for_region, get_region_bbox, get_country_centroid
 
 router = APIRouter()
 
@@ -23,6 +23,12 @@ class RegionListResponse(BaseModel):
     regions: List[RegionInfo]
 
 
+class CountryCentroidResponse(BaseModel):
+    """Country centroid coordinates."""
+    lat: float
+    lon: float
+
+
 @router.get("", response_model=RegionListResponse)
 async def list_regions():
     """Get all available regions."""
@@ -36,8 +42,20 @@ async def list_regions():
             default_zoom=info.get("default_zoom"),
         )
         for region_id, info in regions_data.items()
+        if region_id != "country_centroids"
     ]
     return RegionListResponse(regions=regions_list)
+
+
+@router.get("/country-centroid", response_model=CountryCentroidResponse)
+async def get_centroid(country: str = Query(..., description="Country name")):
+    """Get the centroid coordinates for a country."""
+    centroid = get_country_centroid(country)
+
+    if not centroid:
+        raise HTTPException(status_code=404, detail=f"Centroid not found for country '{country}'")
+
+    return CountryCentroidResponse(lat=centroid["lat"], lon=centroid["lon"])
 
 
 @router.get("/{region_id}", response_model=RegionInfo)
@@ -45,7 +63,7 @@ async def get_region(region_id: str):
     """Get a specific region by ID."""
     regions_data = get_regions()
 
-    if region_id not in regions_data:
+    if region_id not in regions_data or region_id == "country_centroids":
         raise HTTPException(status_code=404, detail=f"Region '{region_id}' not found")
 
     info = regions_data[region_id]

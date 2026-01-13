@@ -327,6 +327,74 @@ def clean_global_integrated_power_data(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def load_gppd_data(
+    csv_path: Path,
+    countries: Optional[List[str]] = None,
+    verbose: bool = False,
+) -> pd.DataFrame:
+    """Load and standardize power plant data from Global Power Plant Database (WRI).
+
+    Args:
+        csv_path: Path to GPPD CSV file
+        countries: List of countries to filter by (None = all countries)
+        verbose: Whether to print progress messages
+
+    Returns:
+        DataFrame with standardized columns: name, technology, capacity_mw, status,
+        status_category, country, latitude, longitude, fuel, start_year
+    """
+    path = Path(csv_path)
+    if not path.exists():
+        raise FileNotFoundError(f"GPPD data file not found: {path}")
+
+    df_raw = pd.read_csv(path)
+
+    if verbose:
+        print(f"Loaded {len(df_raw)} raw rows from {path}")
+
+    # Map GPPD columns to standard schema
+    df = pd.DataFrame({
+        "name": df_raw["name"].fillna(""),
+        "technology": df_raw["primary_fuel"].fillna("Unknown"),
+        "capacity_mw": pd.to_numeric(df_raw["capacity_mw"], errors="coerce").fillna(0),
+        "status": "Operating",  # GPPD only contains operating plants
+        "country": df_raw["country_long"].fillna(df_raw.get("country", "")),
+        "latitude": pd.to_numeric(df_raw["latitude"], errors="coerce"),
+        "longitude": pd.to_numeric(df_raw["longitude"], errors="coerce"),
+        "fuel": df_raw["primary_fuel"].fillna(""),
+        "start_year": pd.to_numeric(df_raw["commissioning_year"], errors="coerce"),
+    })
+
+    # Filter by countries if provided
+    if countries:
+        df = filter_by_country(df, countries, verbose=verbose)
+
+    # Normalize technology names using TECHNOLOGY_MAPPING
+    def normalize_tech(tech: str) -> str:
+        if not tech:
+            return "Unknown"
+        tech_lower = tech.lower().strip()
+        if tech_lower in TECHNOLOGY_MAPPING:
+            return TECHNOLOGY_MAPPING[tech_lower]
+        for key, value in TECHNOLOGY_MAPPING.items():
+            if key in tech_lower:
+                return value
+        return tech.title() if tech else "Unknown"
+
+    df["technology"] = df["technology"].apply(normalize_tech)
+
+    # Add status category (all are Operating in GPPD)
+    df["status_category"] = "Operating"
+
+    # Drop rows without coordinates
+    df = df.dropna(subset=["latitude", "longitude"])
+
+    if verbose:
+        print(f"{len(df)} rows remain after filtering and cleaning")
+
+    return df.reset_index(drop=True)
+
+
 def summarize_by_technology(df: pd.DataFrame, status: str = "Operating") -> pd.DataFrame:
     """Summarize capacity by technology.
 

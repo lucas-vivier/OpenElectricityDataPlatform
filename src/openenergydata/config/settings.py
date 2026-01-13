@@ -26,6 +26,13 @@ class Settings:
     cds_api_key: Optional[str] = None
     cds_api_url: str = "https://cds.climate.copernicus.eu/api/v2"
 
+    # Zenodo settings
+    zenodo_enabled: bool = True
+    zenodo_api_url: str = "https://zenodo.org/api"
+    zenodo_sandbox_url: str = "https://sandbox.zenodo.org/api"
+    zenodo_use_sandbox: bool = False
+    zenodo_api_token: Optional[str] = None
+
     # Default settings
     default_year: int = 2020
     default_n_representative_days: int = 12
@@ -47,6 +54,16 @@ class Settings:
             if env_url:
                 self.cds_api_url = env_url
 
+        # Zenodo settings
+        if self.zenodo_api_token is None:
+            self.zenodo_api_token = os.getenv("ZENODO_API_TOKEN")
+        zenodo_enabled_env = os.getenv("ZENODO_ENABLED")
+        if zenodo_enabled_env is not None:
+            self.zenodo_enabled = zenodo_enabled_env.lower() in ("true", "1", "yes")
+        zenodo_sandbox_env = os.getenv("ZENODO_USE_SANDBOX")
+        if zenodo_sandbox_env is not None:
+            self.zenodo_use_sandbox = zenodo_sandbox_env.lower() in ("true", "1", "yes")
+
     @classmethod
     def from_yaml(cls, config_path: Path) -> "Settings":
         """Load settings from a YAML config file."""
@@ -66,6 +83,9 @@ class Settings:
             entsoe_api_key=config.get("entsoe_api_key"),
             cds_api_key=config.get("cds_api_key"),
             cds_api_url=config.get("cds_api_url", "https://cds.climate.copernicus.eu/api/v2"),
+            zenodo_enabled=config.get("zenodo_enabled", True),
+            zenodo_api_token=config.get("zenodo_api_token"),
+            zenodo_use_sandbox=config.get("zenodo_use_sandbox", False),
             default_year=config.get("default_year", 2020),
             default_n_representative_days=config.get("default_n_representative_days", 12),
         )

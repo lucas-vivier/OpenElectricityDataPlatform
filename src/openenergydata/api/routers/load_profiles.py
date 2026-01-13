@@ -150,26 +150,50 @@ async def get_monthly_average(
     countries: Optional[List[str]] = Query(None, description="Filter by specific countries"),
     year: int = Query(2020, description="Year"),
 ):
-    """Get average daily profile for each month."""
+    """Get average daily profile for each month, grouped by country/zone."""
     df = load_load_profiles(region, countries or [], year=year)
 
     if df is None or df.empty:
         raise HTTPException(status_code=404, detail="No load profile data found")
 
-    # Group by month and hour, calculate mean
-    monthly = df.groupby(["month", "hour"])["value"].mean().reset_index()
+    # Get unique zones/countries
+    zones = df["zone"].unique().tolist() if "zone" in df.columns else [region]
 
-    result = {}
+    # Build per-country monthly profiles
+    profiles_by_country = {}
+    for zone in zones:
+        zone_df = df[df["zone"] == zone] if "zone" in df.columns else df
+
+        # Group by month and hour, calculate mean for this zone
+        monthly = zone_df.groupby(["month", "hour"])["value"].mean().reset_index()
+
+        zone_monthly = {}
+        for month in range(1, 13):
+            month_data = monthly[monthly["month"] == month].sort_values("hour")
+            if not month_data.empty:
+                zone_monthly[month] = {
+                    "hours": month_data["hour"].tolist(),
+                    "values": month_data["value"].tolist(),
+                }
+
+        if zone_monthly:
+            profiles_by_country[zone] = zone_monthly
+
+    # Also compute aggregate monthly profiles (backward compatibility)
+    monthly_all = df.groupby(["month", "hour"])["value"].mean().reset_index()
+    aggregate_monthly = {}
     for month in range(1, 13):
-        month_data = monthly[monthly["month"] == month].sort_values("hour")
+        month_data = monthly_all[monthly_all["month"] == month].sort_values("hour")
         if not month_data.empty:
-            result[month] = {
+            aggregate_monthly[month] = {
                 "hours": month_data["hour"].tolist(),
                 "values": month_data["value"].tolist(),
             }
 
     return {
-        "zone": df["zone"].iloc[0] if "zone" in df.columns else region,
+        "zone": zones[0] if len(zones) == 1 else region,
         "year": year,
-        "monthly_profiles": result,
+        "monthly_profiles": aggregate_monthly,  # Backward compatible
+        "profiles_by_country": profiles_by_country,  # New per-country data
+        "countries": zones,
     }

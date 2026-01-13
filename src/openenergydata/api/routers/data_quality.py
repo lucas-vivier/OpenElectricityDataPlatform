@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from pathlib import Path
 
 from ...data.quality import (
     assess_country_quality,
@@ -10,7 +11,8 @@ from ...data.quality import (
     get_quality_summary,
     QualityLevel,
 )
-from ...config.regions import get_countries_for_region
+from ...config.regions import get_countries_for_region, get_regions
+from ...config.data_paths import get_data_source_path, data_source_exists
 
 router = APIRouter()
 
@@ -212,3 +214,83 @@ async def get_quality_overview(
         "datasets_coverage": summary["datasets_coverage"],
         "countries_by_level": countries_by_level,
     }
+
+
+class DatasetAvailability(BaseModel):
+    """Lightweight availability check for a dataset."""
+    available: bool
+    source: str
+    source_exists: bool
+
+
+class CountryAvailability(BaseModel):
+    """Lightweight availability check for a country."""
+    country: str
+    datasets: Dict[str, DatasetAvailability]
+
+
+class RegionAvailabilityResponse(BaseModel):
+    """Lightweight availability check for a region."""
+    region: str
+    total_countries: int
+    data_sources: Dict[str, bool]
+    countries: List[CountryAvailability]
+
+
+@router.get("/availability", response_model=RegionAvailabilityResponse)
+async def check_data_availability(
+    region: str = Query(..., description="Region ID (e.g., 'southern_africa')"),
+):
+    """
+    Quick check of data availability without loading full datasets.
+    Much faster than full quality assessment - just checks if source files exist.
+    """
+    countries = get_countries_for_region(region)
+
+    # Check which data sources exist
+    data_sources = {
+        "power_plants": data_source_exists("global_integrated_power_plants"),
+        "load_profiles": True,  # Synthetic data always available
+        "hydropower": data_source_exists("african_hydro_atlas") or data_source_exists("global_hydro_tracker"),
+        "solar_potential": data_source_exists("irena_solar_msr"),
+        "wind_potential": data_source_exists("irena_wind_msr"),
+        "socioeconomic": data_source_exists("owid_energy"),
+    }
+
+    # For each country, indicate which datasets are potentially available
+    # This is a quick check - actual data filtering happens when loading
+    country_availability = []
+    for country in countries:
+        datasets = {}
+        for ds_name, available in data_sources.items():
+            source_path = ""
+            if ds_name == "power_plants":
+                source_path = "Global-Integrated-Power-April-2025.xlsx"
+            elif ds_name == "hydropower":
+                source_path = "African_Hydropower_Atlas_v2-0.xlsx"
+            elif ds_name == "solar_potential":
+                source_path = "SolarPV_BestMSRsToCover5%CountryArea.csv"
+            elif ds_name == "wind_potential":
+                source_path = "Wind_BestMSRsToCover5%CountryArea.csv"
+            elif ds_name == "socioeconomic":
+                source_path = "owid-energy-data.csv"
+            elif ds_name == "load_profiles":
+                source_path = "synthetic (generated)"
+
+            datasets[ds_name] = DatasetAvailability(
+                available=available,
+                source=source_path,
+                source_exists=available,
+            )
+
+        country_availability.append(CountryAvailability(
+            country=country,
+            datasets=datasets,
+        ))
+
+    return RegionAvailabilityResponse(
+        region=region,
+        total_countries=len(countries),
+        data_sources=data_sources,
+        countries=country_availability,
+    )

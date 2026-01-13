@@ -1,0 +1,81 @@
+# OpenEnergyData Configuration
+# Copy this file to config.yaml and update values as needed.
+# Environment variables take precedence over values in this file.
+
+# =============================================================================
+# Data Paths
+# =============================================================================
+
+# Base directory for all data files
+# data_dir: ./data
+
+# Directory for preprocessed local data (parquet files)
+# local_data_dir: ./data/local
+
+# =============================================================================
+# Data Loading
+# =============================================================================
+# Data is loaded in this order (cascade):
+# 1. Local parquet files (fastest, in data/local/{region}/)
+# 2. Zenodo download (on-demand, cached locally)
+# 3. Source files (raw data in data/sources/)
+# 4. Mock data (development fallback)
+
+# =============================================================================
+# Zenodo Settings
+# =============================================================================
+# Zenodo hosts preprocessed datasets for production use.
+# See: https://zenodo.org
+
+# Enable/disable automatic Zenodo downloads
+zenodo_enabled: true
+
+# Use Zenodo sandbox for testing uploads (sandbox.zenodo.org)
+zenodo_use_sandbox: false
+
+# API token for uploading to Zenodo (not needed for downloads)
+# Set via environment variable ZENODO_API_TOKEN instead
+# zenodo_api_token: null
+
+# =============================================================================
+# External API Keys
+# =============================================================================
+# These are optional and only needed for specific features.
+# Prefer setting these via environment variables for security.
+
+# Renewables.ninja API key for fetching solar/wind profiles
+# Get one at: https://www.renewables.ninja/register
+# Environment variable: API_TOKEN_RENEWABLES_NINJA
+# renewables_ninja_api_key: null
+
+# ENTSO-E API key for European grid data
+# Get one at: https://transparency.entsoe.eu/
+# Environment variable: API_TOKEN_ENTSOE
+# entsoe_api_key: null
+
+# Copernicus Climate Data Store API key
+# Get one at: https://cds.climate.copernicus.eu/
+# Environment variable: CDS_API_KEY
+# cds_api_key: null
+# cds_api_url: https://cds.climate.copernicus.eu/api/v2
+
+# =============================================================================
+# Default Settings
+# =============================================================================
+
+# Default year for time series data
+default_year: 2020
+
+# Number of representative days for clustering
+default_n_representative_days: 12
+
+# =============================================================================
+# Map Settings
+# =============================================================================
+
+# Default zoom level for maps (1-18)
+default_map_zoom: 5
+
+# Map tile provider
+# Options: "CartoDB positron", "OpenStreetMap", "Stamen Terrain"
+map_tile_provider: "CartoDB positron"

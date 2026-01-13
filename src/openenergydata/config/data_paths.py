@@ -18,6 +18,7 @@ METADATA_DIR = DATA_DIR / "metadata"
 DATA_SOURCES = {
     # Power Plants
     "global_integrated_power_plants": SOURCES_DIR / "Global-Integrated-Power-April-2025.xlsx",
+    "global_power_plant_database": SOURCES_DIR / "global_power_plant_database.csv",
 
     # Hydropower
     "african_hydro_atlas": SOURCES_DIR / "African_Hydropower_Atlas_v2-0.xlsx",

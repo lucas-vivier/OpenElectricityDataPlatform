@@ -1,18 +1,6 @@
 {
-  "global": {
-    "name": "Global",
-    "countries": [],
-    "bbox": [-180.0, -60.0, 180.0, 75.0],
-    "default_zoom": 2
-  },
-  "south_africa": {
-    "name": "South Africa",
-    "countries": ["South Africa"],
-    "bbox": [16.4, -35.0, 33.0, -22.0],
-    "default_zoom": 5
-  },
-  "southern_africa": {
-    "name": "Southern Africa",
+  "sapp": {
+    "name": "Southern African Power Pool (SAPP)",
     "countries": [
       "South Africa",
       "Namibia",
@@ -22,13 +10,16 @@
       "Zambia",
       "Malawi",
       "Lesotho",
-      "Eswatini"
+      "Eswatini",
+      "Angola",
+      "Democratic Republic of the Congo",
+      "Tanzania"
     ],
-    "bbox": [11.0, -35.0, 41.0, -8.0],
+    "bbox": [8.0, -35.0, 41.0, -1.0],
     "default_zoom": 4
   },
-  "west_africa": {
-    "name": "West Africa",
+  "wapp": {
+    "name": "West African Power Pool (WAPP)",
     "countries": [
       "Nigeria",
       "Ghana",
@@ -50,8 +41,8 @@
     "bbox": [-18.0, 4.0, 16.0, 28.0],
     "default_zoom": 4
   },
-  "east_africa": {
-    "name": "East Africa",
+  "eapp": {
+    "name": "East African Power Pool (EAPP)",
     "countries": [
       "Kenya",
       "Tanzania",
@@ -60,15 +51,17 @@
       "Burundi",
       "Ethiopia",
       "South Sudan",
-      "Somalia",
+      "Sudan",
+      "Egypt",
+      "Libya",
       "Djibouti",
       "Eritrea"
     ],
-    "bbox": [28.0, -12.0, 52.0, 18.0],
+    "bbox": [22.0, -12.0, 52.0, 32.0],
     "default_zoom": 4
   },
-  "central_africa": {
-    "name": "Central Africa",
+  "capp": {
+    "name": "Central African Power Pool (CAPP)",
     "countries": [
       "Democratic Republic of the Congo",
       "Republic of the Congo",
@@ -77,193 +70,58 @@
       "Gabon",
       "Equatorial Guinea",
       "Chad",
-      "Angola"
+      "Angola",
+      "Sao Tome and Principe"
     ],
-    "bbox": [8.0, -18.0, 32.0, 24.0],
+    "bbox": [5.0, -18.0, 32.0, 24.0],
     "default_zoom": 4
   },
-  "south_asia": {
-    "name": "South Asia",
-    "countries": [
-      "India",
-      "Pakistan",
-      "Bangladesh",
-      "Sri Lanka",
-      "Nepal",
-      "Bhutan",
-      "Afghanistan"
-    ],
-    "bbox": [60.0, 5.0, 98.0, 38.0],
-    "default_zoom": 4
-  },
-  "southeast_asia": {
-    "name": "Southeast Asia",
-    "countries": [
-      "Indonesia",
-      "Thailand",
-      "Vietnam",
-      "Philippines",
-      "Malaysia",
-      "Myanmar",
-      "Cambodia",
-      "Laos",
-      "Singapore",
-      "Brunei",
-      "Timor-Leste"
-    ],
-    "bbox": [92.0, -11.0, 142.0, 29.0],
-    "default_zoom": 4
-  },
-  "north_africa": {
-    "name": "North Africa",
-    "countries": [
-      "Egypt",
-      "Libya",
-      "Tunisia",
-      "Algeria",
-      "Morocco",
-      "Sudan"
-    ],
-    "bbox": [-18.0, 15.0, 37.0, 38.0],
-    "default_zoom": 4
-  },
-  "europe": {
-    "name": "Europe",
-    "countries": [
-      "Germany",
-      "France",
-      "United Kingdom",
-      "Italy",
-      "Spain",
-      "Poland",
-      "Netherlands",
-      "Belgium",
-      "Sweden",
-      "Norway",
-      "Denmark",
-      "Finland",
-      "Austria",
-      "Switzerland",
-      "Portugal",
-      "Greece",
-      "Czech Republic",
-      "Romania",
-      "Hungary",
-      "Ireland",
-      "Croatia",
-      "Slovakia",
-      "Bulgaria",
-      "Serbia",
-      "Bosnia and Herzegovina",
-      "Slovenia",
-      "Lithuania",
-      "Latvia",
-      "Estonia",
-      "North Macedonia",
-      "Albania",
-      "Montenegro",
-      "Moldova",
-      "Kosovo",
-      "Luxembourg",
-      "Malta",
-      "Cyprus",
-      "Iceland"
-    ],
-    "bbox": [-25.0, 34.0, 45.0, 72.0],
-    "default_zoom": 4
-  },
-  "balkans": {
-    "name": "Balkans",
-    "countries": [
-      "Croatia",
-      "Bosnia and Herzegovina",
-      "Serbia",
-      "Montenegro",
-      "North Macedonia",
-      "Albania",
-      "Kosovo",
-      "Slovenia",
-      "Greece",
-      "Bulgaria",
-      "Romania"
-    ],
-    "bbox": [13.0, 35.0, 30.0, 47.0],
-    "default_zoom": 5
-  },
-  "north_america": {
-    "name": "North America",
-    "countries": [
-      "United States",
-      "Canada",
-      "Mexico"
-    ],
-    "bbox": [-170.0, 14.0, -50.0, 72.0],
-    "default_zoom": 3
-  },
-  "south_america": {
-    "name": "South America",
-    "countries": [
-      "Brazil",
-      "Argentina",
-      "Colombia",
-      "Peru",
-      "Chile",
-      "Venezuela",
-      "Ecuador",
-      "Bolivia",
-      "Paraguay",
-      "Uruguay",
-      "Guyana",
-      "Suriname"
-    ],
-    "bbox": [-82.0, -56.0, -34.0, 13.0],
-    "default_zoom": 3
-  },
-  "middle_east": {
-    "name": "Middle East",
-    "countries": [
-      "Saudi Arabia",
-      "United Arab Emirates",
-      "Qatar",
-      "Kuwait",
-      "Bahrain",
-      "Oman",
-      "Yemen",
-      "Iraq",
-      "Jordan",
-      "Lebanon",
-      "Syria",
-      "Israel",
-      "Palestine",
-      "Iran",
-      "Turkey"
-    ],
-    "bbox": [25.0, 12.0, 63.0, 42.0],
-    "default_zoom": 4
-  },
-  "east_asia": {
-    "name": "East Asia",
-    "countries": [
-      "China",
-      "Japan",
-      "South Korea",
-      "North Korea",
-      "Taiwan",
-      "Mongolia"
-    ],
-    "bbox": [73.0, 18.0, 150.0, 54.0],
-    "default_zoom": 3
-  },
-  "oceania": {
-    "name": "Oceania",
-    "countries": [
-      "Australia",
-      "New Zealand",
-      "Papua New Guinea",
-      "Fiji",
-      "Solomon Islands"
-    ],
-    "bbox": [110.0, -47.0, 180.0, 0.0],
-    "default_zoom": 3
+  "country_centroids": {
+    "South Africa": {"lat": -30.5595, "lon": 22.9375},
+    "Namibia": {"lat": -22.9576, "lon": 18.4904},
+    "Botswana": {"lat": -22.3285, "lon": 24.6849},
+    "Zimbabwe": {"lat": -19.0154, "lon": 29.1549},
+    "Mozambique": {"lat": -18.6657, "lon": 35.5296},
+    "Zambia": {"lat": -13.1339, "lon": 27.8493},
+    "Malawi": {"lat": -13.2543, "lon": 34.3015},
+    "Lesotho": {"lat": -29.6100, "lon": 28.2336},
+    "Eswatini": {"lat": -26.5225, "lon": 31.4659},
+    "Angola": {"lat": -11.2027, "lon": 17.8739},
+    "Democratic Republic of the Congo": {"lat": -4.0383, "lon": 21.7587},
+    "Tanzania": {"lat": -6.3690, "lon": 34.8888},
+    "Nigeria": {"lat": 9.0820, "lon": 8.6753},
+    "Ghana": {"lat": 7.9465, "lon": -1.0232},
+    "Senegal": {"lat": 14.4974, "lon": -14.4524},
+    "Cote d'Ivoire": {"lat": 7.5400, "lon": -5.5471},
+    "Mali": {"lat": 17.5707, "lon": -3.9962},
+    "Burkina Faso": {"lat": 12.2383, "lon": -1.5616},
+    "Niger": {"lat": 17.6078, "lon": 8.0817},
+    "Guinea": {"lat": 9.9456, "lon": -9.6966},
+    "Benin": {"lat": 9.3077, "lon": 2.3158},
+    "Togo": {"lat": 8.6195, "lon": 0.8248},
+    "Sierra Leone": {"lat": 8.4606, "lon": -11.7799},
+    "Liberia": {"lat": 6.4281, "lon": -9.4295},
+    "Mauritania": {"lat": 21.0079, "lon": -10.9408},
+    "Gambia": {"lat": 13.4432, "lon": -15.3101},
+    "Guinea-Bissau": {"lat": 11.8037, "lon": -15.1804},
+    "Cape Verde": {"lat": 16.5388, "lon": -23.0418},
+    "Kenya": {"lat": -0.0236, "lon": 37.9062},
+    "Uganda": {"lat": 1.3733, "lon": 32.2903},
+    "Rwanda": {"lat": -1.9403, "lon": 29.8739},
+    "Burundi": {"lat": -3.3731, "lon": 29.9189},
+    "Ethiopia": {"lat": 9.1450, "lon": 40.4897},
+    "South Sudan": {"lat": 6.8770, "lon": 31.3070},
+    "Sudan": {"lat": 12.8628, "lon": 30.2176},
+    "Egypt": {"lat": 26.8206, "lon": 30.8025},
+    "Libya": {"lat": 26.3351, "lon": 17.2283},
+    "Djibouti": {"lat": 11.8251, "lon": 42.5903},
+    "Eritrea": {"lat": 15.1794, "lon": 39.7823},
+    "Republic of the Congo": {"lat": -0.2280, "lon": 15.8277},
+    "Central African Republic": {"lat": 6.6111, "lon": 20.9394},
+    "Cameroon": {"lat": 7.3697, "lon": 12.3547},
+    "Gabon": {"lat": -0.8037, "lon": 11.6094},
+    "Equatorial Guinea": {"lat": 1.6508, "lon": 10.2679},
+    "Chad": {"lat": 15.4542, "lon": 18.7322},
+    "Sao Tome and Principe": {"lat": 0.1864, "lon": 6.6131}
   }
 }

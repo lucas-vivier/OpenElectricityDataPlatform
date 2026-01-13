@@ -1,8 +1,15 @@
-staticSites:
-  - name: openenergydata-frontend
+services:
+  # Backend API on Koyeb (uses Dockerfile)
+  # Deploy separately on Koyeb with Docker buildpack
+
+  # Frontend on Render
+  - type: web
+    name: openenergydata-frontend
+    runtime: static
     rootDir: frontend
-    buildCommand: npm install && npm run build
-    publishDir: dist
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
         value: https://YOUR_KOYEB_APP.koyeb.app
+    autoDeploy: true
