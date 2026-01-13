@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openenergydata"
+version = "0.1.0"
+description = "Unified API for open energy data - capacity expansion modeling"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "World Bank Energy Team" }
+]
+keywords = ["energy", "modeling", "open-data", "api", "fastapi"]
+
+dependencies = [
+    # API Framework
+    "fastapi>=0.109",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+
+    # Data processing
+    "pandas>=2.0",
+    "geopandas>=0.14",
+    "pyarrow>=14",
+    "openpyxl>=3.1",
+
+    # ML/Treatments
+    "scikit-learn>=1.4",
+
+    # Utilities
+    "requests>=2.31",
+    "pyyaml>=6.0",
+    "python-multipart>=0.0.6",
+    "folium>=0.15",
+]
+
+[project.optional-dependencies]
+pdf = [
+    "weasyprint>=60",
+    "jinja2>=3.1",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.26",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+openenergydata = "openenergydata.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openenergydata"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"

@@ -1,0 +1,10 @@
+services:
+  - name: openenergydata-api
+    build:
+      type: buildpack
+      buildpack: python
+    run:
+      command: uvicorn openenergydata.api.main:app --host 0.0.0.0 --port ${PORT}
+    env:
+      - name: ALLOWED_ORIGINS
+        value: https://YOUR_RENDER_APP.onrender.com

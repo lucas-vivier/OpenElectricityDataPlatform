@@ -1,0 +1,50 @@
+{
+  "power_plants": {
+    "name": "Global Integrated Power",
+    "provider": "Global Energy Monitor",
+    "url": "https://globalenergymonitor.org/",
+    "license": "CC-BY",
+    "description": "Comprehensive database of power generation facilities worldwide",
+    "update_frequency": "quarterly",
+    "columns": {
+      "name": "Plant or project name",
+      "technology": "Generation technology (Solar, Wind, Hydro, etc.)",
+      "capacity_mw": "Installed capacity in megawatts",
+      "status": "Operating status (Operating, Construction, etc.)",
+      "country": "Country name",
+      "latitude": "Geographic latitude",
+      "longitude": "Geographic longitude"
+    }
+  },
+  "load_profiles": {
+    "name": "Synthetic Load Profiles",
+    "provider": "Toktarova et al. (2019)",
+    "url": "https://doi.org/10.1016/j.energy.2019.02.051",
+    "license": "Research use",
+    "description": "Synthetic hourly electricity demand profiles for all countries",
+    "update_frequency": "static",
+    "columns": {
+      "zone": "Country or zone identifier",
+      "month": "Month (1-12)",
+      "day": "Day of month (1-31)",
+      "hour": "Hour of day (0-23)",
+      "value": "Normalized demand (0-1)"
+    }
+  },
+  "renewables_ninja": {
+    "name": "Renewables.ninja",
+    "provider": "Renewables.ninja",
+    "url": "https://renewables.ninja/",
+    "license": "CC-BY-NC 4.0",
+    "description": "Simulated hourly solar and wind power output based on weather data",
+    "update_frequency": "on-demand API",
+    "requires_api_key": true,
+    "columns": {
+      "zone": "Location identifier",
+      "month": "Month (1-12)",
+      "day": "Day of month (1-31)",
+      "hour": "Hour of day (0-23)",
+      "capacity_factor": "Capacity factor (0-1)"
+    }
+  }
+}

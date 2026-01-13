@@ -1,0 +1,8 @@
+staticSites:
+  - name: openenergydata-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://YOUR_KOYEB_APP.koyeb.app
