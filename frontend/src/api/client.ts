@@ -132,6 +132,50 @@ export interface TimeSeriesResponse {
   data: TimeSeriesPoint[];
 }
 
+// Data Quality types
+export interface DatasetQuality {
+  dataset: string;
+  available: boolean;
+  record_count: number;
+  completeness: number;
+  quality_level: string;
+  issues: string[];
+  metrics: Record<string, any>;
+}
+
+export interface CountryQuality {
+  country: string;
+  iso_code?: string;
+  latitude?: number;
+  longitude?: number;
+  overall_score: number;
+  quality_level: string;
+  datasets: Record<string, DatasetQuality>;
+  summary: string;
+}
+
+export interface RegionQualitySummary {
+  total_countries: number;
+  by_quality_level: Record<string, number>;
+  average_score: number;
+  datasets_coverage: Record<string, { countries_with_data: number; coverage_pct: number }>;
+}
+
+export interface RegionQualityResponse {
+  region: string;
+  summary: RegionQualitySummary;
+  countries: CountryQuality[];
+}
+
+export interface QualitySummaryResponse {
+  region: string;
+  total_countries: number;
+  average_score: number;
+  by_quality_level: Record<string, number>;
+  datasets_coverage: Record<string, { countries_with_data: number; coverage_pct: number }>;
+  countries_by_level: Record<string, Array<{ country: string; score: number }>>;
+}
+
 // API functions
 export const regionsApi = {
   list: () => api.get<{ regions: Region[] }>('/api/regions').then(r => r.data.regions),
@@ -260,4 +304,18 @@ export const socioeconomicApi = {
 
   renewablesShare: (params: { countries?: string[]; year?: number }) =>
     api.get('/api/socioeconomic/renewables-share', { params }).then(r => r.data),
+};
+
+export const dataQualityApi = {
+  country: (params: { region: string; country: string }) =>
+    api.get<CountryQuality>('/api/data-quality/country', { params }).then(r => r.data),
+
+  region: (params: { region: string }) =>
+    api.get<RegionQualityResponse>('/api/data-quality/region', { params }).then(r => r.data),
+
+  regionGeojson: (params: { region: string }) =>
+    api.get('/api/data-quality/region/geojson', { params }).then(r => r.data),
+
+  summary: (params: { region: string }) =>
+    api.get<QualitySummaryResponse>('/api/data-quality/summary', { params }).then(r => r.data),
 };

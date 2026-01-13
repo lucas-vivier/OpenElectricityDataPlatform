@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom';
-import { Database, Map, BarChart3, Info } from 'lucide-react';
+import { Database, Map, BarChart3, Info, ShieldCheck } from 'lucide-react';
 import DataExplorer from './pages/DataExplorer';
 import Catalog from './pages/Catalog';
 import About from './pages/About';
+import DataQuality from './pages/DataQuality';
 import './App.css';
 
 const queryClient = new QueryClient({
@@ -30,6 +31,10 @@ function App() {
                 <Map size={18} />
                 Explorer
               </NavLink>
+              <NavLink to="/quality" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                <ShieldCheck size={18} />
+                Data Quality
+              </NavLink>
               <NavLink to="/catalog" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
                 <BarChart3 size={18} />
                 Catalog
@@ -44,6 +49,7 @@ function App() {
           <main className="main">
             <Routes>
               <Route path="/" element={<DataExplorer />} />
+              <Route path="/quality" element={<DataQuality />} />
               <Route path="/catalog" element={<Catalog />} />
               <Route path="/about" element={<About />} />
             </Routes>

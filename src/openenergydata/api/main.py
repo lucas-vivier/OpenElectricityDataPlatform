@@ -5,7 +5,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import regions, power_plants, load_profiles, renewables, treatments, exports, hydropower, resource_potential, socioeconomic
+from .routers import regions, power_plants, load_profiles, renewables, treatments, exports, hydropower, resource_potential, socioeconomic, data_quality
 
 
 def _get_allowed_origins() -> list[str]:
@@ -46,6 +46,7 @@ app.include_router(exports.router, prefix="/api/exports", tags=["Exports"])
 app.include_router(hydropower.router, prefix="/api/hydropower", tags=["Hydropower"])
 app.include_router(resource_potential.router, prefix="/api/resource-potential", tags=["Resource Potential"])
 app.include_router(socioeconomic.router, prefix="/api/socioeconomic", tags=["Socio-Economic"])
+app.include_router(data_quality.router, prefix="/api/data-quality", tags=["Data Quality"])
 
 
 @app.get("/", tags=["Health"])
@@ -73,6 +74,7 @@ async def api_info():
             "hydropower": "/api/hydropower",
             "resource_potential": "/api/resource-potential",
             "socioeconomic": "/api/socioeconomic",
+            "data_quality": "/api/data-quality",
         },
         "documentation": "/docs",
     }
