@@ -11,5 +11,5 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: striking-nedda-modelling-assistant-c122bea8.koyeb.app/
+        value: https://striking-nedda-modelling-assistant-c122bea8.koyeb.app
     autoDeploy: true

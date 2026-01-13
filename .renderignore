@@ -1,0 +1,3 @@
+# Ignore Docker files - this project uses static site hosting for frontend
+Dockerfile
+.dockerignore

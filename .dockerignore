@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+dist
+build
+.venv
+venv
+env
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Frontend (not needed for backend container)
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test and docs
+tests
+docs
+*.md
+!data/**/*.md
+
+# Local dev files
+.env
+.env.*
+*.log
+.coverage
+htmlcov
+.pytest_cache
+
+# Render config (not needed in container)
+render.yaml
+.renderignore
+
+# Claude files
+.claude
+CLAUDE.md

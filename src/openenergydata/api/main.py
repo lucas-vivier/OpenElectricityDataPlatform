@@ -60,6 +60,12 @@ async def root():
     }
 
 
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Health check endpoint for container orchestration."""
+    return {"status": "healthy"}
+
+
 @app.get("/api", tags=["Health"])
 async def api_info():
     """API information."""
