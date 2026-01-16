@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { Loader2, Download, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { regionsApi, powerPlantsApi, loadProfilesApi, hydropowerApi, resourcePotentialApi, socioeconomicApi, renewablesApi, dataQualityApi, type RenewablesNinjaResponse, API_BASE_URL } from '../api/client';
 import SourceInfo, { DATA_SOURCES } from '../components/SourceInfo';
